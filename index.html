@@ -11,626 +11,690 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #f9f8f5;
+      --bg: #f4f3ef;
       --surface: #ffffff;
-      --surface2: #f1f0ec;
-      --border: rgba(0,0,0,0.1);
-      --border-strong: rgba(0,0,0,0.2);
-      --text: #1a1a18;
-      --text2: #6b6a65;
-      --text3: #a09f9a;
-      --green: #1D9E75;
-      --green-bg: #E1F5EE;
-      --red: #E24B4A;
-      --red-bg: #FCEBEB;
-      --radius-md: 8px;
-      --radius-lg: 12px;
+      --surface2: #eeede8;
+      --surface3: #e6e5e0;
+      --border: rgba(0,0,0,0.08);
+      --border-md: rgba(0,0,0,0.14);
+      --border-strong: rgba(0,0,0,0.22);
+      --text: #181816;
+      --text2: #636259;
+      --text3: #a09d94;
+      --green: #1a9470;
+      --green-bg: rgba(26,148,112,0.1);
+      --green-text: #0f6e56;
+      --red: #d94545;
+      --red-bg: rgba(217,69,69,0.1);
+      --red-text: #a32d2d;
+      --r-md: 8px;
+      --r-lg: 12px;
+      --r-xl: 16px;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #1a1a18;
-        --surface: #232321;
-        --surface2: #2c2c2a;
-        --border: rgba(255,255,255,0.1);
+        --bg: #161614;
+        --surface: #1f1f1d;
+        --surface2: #272725;
+        --surface3: #2f2f2c;
+        --border: rgba(255,255,255,0.07);
+        --border-md: rgba(255,255,255,0.12);
         --border-strong: rgba(255,255,255,0.2);
-        --text: #f0efe9;
-        --text2: #a09f9a;
-        --text3: #6b6a65;
-        --green: #5DCAA5;
-        --green-bg: rgba(29,158,117,0.15);
-        --red: #F09595;
-        --red-bg: rgba(226,75,74,0.15);
+        --text: #edecea;
+        --text2: #9c9990;
+        --text3: #5e5c57;
+        --green: #3dba94;
+        --green-bg: rgba(61,186,148,0.12);
+        --green-text: #5dcaa5;
+        --red: #e06060;
+        --red-bg: rgba(224,96,96,0.12);
+        --red-text: #f09595;
       }
     }
 
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 2rem 1rem;
-    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
-    .container { max-width: 800px; margin: 0 auto; }
-
-    header {
-      display: flex;
-      align-items: baseline;
-      gap: 12px;
-      margin-bottom: 2rem;
-    }
-
-    header h1 {
-      font-size: 24px;
-      font-weight: 600;
-      letter-spacing: -0.4px;
-    }
-
-    .badge {
-      font-size: 11px;
-      font-weight: 500;
-      padding: 3px 10px;
-      border-radius: 20px;
-      background: var(--surface2);
-      color: var(--text2);
+    /* Topbar */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 0.5px solid var(--border-md);
+      padding: 0 2rem;
       display: flex;
       align-items: center;
-      gap: 5px;
+      justify-content: space-between;
+      height: 54px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      gap: 12px;
     }
-
-    .badge.live { background: var(--green-bg); color: var(--green); }
-
-    .pulse {
-      display: inline-block;
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: var(--green);
-      animation: pulse 1.5s ease-in-out infinite;
+    .topbar-left { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+    .logo { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+    .badge {
+      font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 20px;
+      background: var(--surface2); color: var(--text3);
+      display: flex; align-items: center; gap: 5px;
     }
+    .badge.live { background: var(--green-bg); color: var(--green-text); }
+    .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1.6s ease-in-out infinite; flex-shrink: 0; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.35;transform:scale(.75)} }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50%       { opacity: .4; transform: scale(.8); }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    .key-input {
+      font-family: 'Space Mono', monospace; font-size: 11px; padding: 6px 10px;
+      border: 0.5px solid var(--border-md); border-radius: var(--r-md);
+      background: var(--surface2); color: var(--text); width: 210px;
     }
+    .key-input:focus { outline: none; border-color: var(--border-strong); }
 
-    /* API Key section */
-    .key-section {
-      background: var(--surface);
-      border: 0.5px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 1.25rem;
-      margin-bottom: 1.5rem;
+    .btn {
+      font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500;
+      padding: 6px 14px; border-radius: var(--r-md); border: 0.5px solid var(--border-md);
+      background: var(--surface); color: var(--text); cursor: pointer; transition: background .12s; white-space: nowrap;
     }
+    .btn:hover { background: var(--surface2); }
+    .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .btn.primary:hover { opacity: .85; }
+    .btn.danger { color: var(--red-text); }
+    .btn.sm { font-size: 11px; padding: 4px 10px; }
 
-    .key-section label {
-      display: block;
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text2);
-      margin-bottom: 8px;
+    /* Page */
+    .page { max-width: 1000px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 2px; margin-bottom: 1.75rem; border-bottom: 0.5px solid var(--border-md); }
+    .tab { font-size: 13px; font-weight: 500; padding: 8px 16px; cursor: pointer; color: var(--text2); border-bottom: 2px solid transparent; margin-bottom: -0.5px; transition: color .12s; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--text); }
+
+    /* Summary strip */
+    .summary-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+    .sc {
+      background: var(--surface); border: 0.5px solid var(--border);
+      border-radius: var(--r-lg); padding: 14px 16px;
     }
+    .sc-label { font-size: 10px; color: var(--text3); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
+    .sc-val { font-family: 'Space Mono', monospace; font-size: 17px; font-weight: 700; line-height: 1; }
+    .sc-sub { font-size: 12px; font-weight: 500; margin-top: 4px; }
 
-    .key-row { display: flex; gap: 8px; flex-wrap: wrap; }
-
-    .key-row input {
-      font-family: 'Space Mono', monospace;
-      font-size: 12px;
-      padding: 8px 12px;
-      border: 0.5px solid var(--border-strong);
-      border-radius: var(--radius-md);
-      background: var(--surface2);
-      color: var(--text);
-      flex: 1;
-      min-width: 200px;
+    /* Holdings table */
+    .table-wrap { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--r-xl); overflow: hidden; margin-bottom: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      font-size: 10px; font-weight: 600; color: var(--text3); text-align: right;
+      padding: 10px 16px; border-bottom: 0.5px solid var(--border); background: var(--surface2);
+      letter-spacing: .3px; white-space: nowrap;
     }
+    thead th:first-child { text-align: left; }
+    tbody tr { border-bottom: 0.5px solid var(--border); cursor: pointer; transition: background .1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 13px 16px; text-align: right; vertical-align: middle; }
+    tbody td:first-child { text-align: left; }
+    .td-sym { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; }
+    .td-name { font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .td-mono { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; }
 
-    .key-row input:focus { outline: none; border-color: var(--text3); }
-
-    button {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 13px;
-      font-weight: 500;
-      padding: 8px 16px;
-      border-radius: var(--radius-md);
-      border: 0.5px solid var(--border-strong);
-      background: var(--surface);
-      color: var(--text);
-      cursor: pointer;
-      transition: background .15s;
+    .pill {
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
     }
+    .pill.up   { background: var(--green-bg); color: var(--green-text); }
+    .pill.dn   { background: var(--red-bg);   color: var(--red-text); }
+    .pill.flat { background: var(--surface2); color: var(--text2); }
 
-    button:hover { background: var(--surface2); }
-    button.danger { color: var(--red); }
-
-    .hint {
-      font-size: 12px;
-      color: var(--text3);
-      margin-top: 8px;
+    /* Market grid */
+    .market-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+    .mcard {
+      background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--r-lg);
+      padding: 14px 16px; cursor: pointer; transition: border-color .12s, transform .1s;
     }
-
-    .hint a { color: var(--text2); }
-
-    /* Cards */
-    .cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      gap: 10px;
-      margin-bottom: 1.5rem;
-    }
-
-    .card {
-      background: var(--surface);
-      border: 0.5px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 14px 16px;
-      cursor: pointer;
-      transition: border-color .15s, transform .1s;
-    }
-
-    .card:hover { border-color: var(--border-strong); }
-    .card.active { border-color: var(--text3); }
-    .card:active { transform: scale(0.98); }
-
-    .card .sym {
-      font-family: 'Space Mono', monospace;
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--text2);
-      letter-spacing: .5px;
-      margin-bottom: 4px;
-    }
-
-    .card .price {
-      font-family: 'Space Mono', monospace;
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--text);
-      line-height: 1;
-    }
-
-    .card .change { font-size: 12px; font-weight: 500; margin-top: 5px; }
-    .card .name { font-size: 11px; color: var(--text3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    .up   { color: var(--green); }
-    .dn   { color: var(--red); }
-    .flat { color: var(--text2); }
+    .mcard:hover { border-color: var(--border-strong); }
+    .mcard.active { border-color: var(--border-strong); }
+    .mcard:active { transform: scale(0.98); }
+    .mc-sym { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: var(--text2); letter-spacing: .6px; margin-bottom: 5px; }
+    .mc-price { font-family: 'Space Mono', monospace; font-size: 19px; font-weight: 700; line-height: 1; }
+    .mc-change { font-size: 11px; font-weight: 600; margin-top: 5px; }
+    .mc-name { font-size: 11px; color: var(--text3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* Detail panel */
     .detail-panel {
-      background: var(--surface);
-      border: 0.5px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 20px;
-      margin-bottom: 1.5rem;
-      display: none;
+      background: var(--surface); border: 0.5px solid var(--border);
+      border-radius: var(--r-xl); padding: 20px 22px; margin-bottom: 1.5rem;
     }
-
-    .dp-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 16px;
-    }
-
-    .dp-sym { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; }
+    .dp-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+    .dp-sym { font-family: 'Space Mono', monospace; font-size: 15px; font-weight: 700; }
     .dp-name { font-size: 12px; color: var(--text2); margin-top: 2px; }
-
-    .dp-price {
-      font-family: 'Space Mono', monospace;
-      font-size: 26px;
-      font-weight: 700;
-      text-align: right;
-    }
-
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-
-    .stat {
-      background: var(--surface2);
-      border-radius: var(--radius-md);
-      padding: 10px 12px;
-    }
-
-    .stat .label { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
-
-    .stat .val {
-      font-family: 'Space Mono', monospace;
-      font-size: 13px;
-      font-weight: 700;
-    }
-
-    .chart-wrap { height: 150px; position: relative; }
+    .dp-price { font-family: 'Space Mono', monospace; font-size: 28px; font-weight: 700; }
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+    .stat { background: var(--surface2); border-radius: var(--r-md); padding: 10px 12px; }
+    .stat .s-label { font-size: 10px; color: var(--text3); margin-bottom: 3px; letter-spacing: .3px; }
+    .stat .s-val { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; }
+    .chart-wrap { height: 150px; }
     .chart-wrap canvas { width: 100% !important; height: 100% !important; }
 
-    /* Watchlist / add */
-    .section-label {
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text2);
-      margin-bottom: 8px;
+    /* Panels */
+    .panel {
+      background: var(--surface); border: 0.5px solid var(--border);
+      border-radius: var(--r-xl); padding: 18px 20px; margin-bottom: 1.25rem;
     }
-
-    .watchlist { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-
-    .sym-btn {
-      font-family: 'Space Mono', monospace;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 5px 10px;
-      border-radius: var(--radius-md);
-      border: 0.5px solid var(--border);
-      background: var(--surface2);
-      color: var(--text2);
-      cursor: pointer;
+    .panel-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 14px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+    .chip {
+      font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700;
+      padding: 4px 9px; border-radius: var(--r-md); border: 0.5px solid var(--border-md);
+      background: var(--surface2); color: var(--text2); cursor: pointer; transition: all .12s;
     }
+    .chip:hover, .chip.active { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
 
-    .sym-btn:hover, .sym-btn.active {
-      border-color: var(--border-strong);
-      background: var(--surface);
-      color: var(--text);
+    .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 11px; color: var(--text3); font-weight: 500; }
+    .form-group input {
+      font-family: 'Space Mono', monospace; font-size: 12px; padding: 7px 10px;
+      border: 0.5px solid var(--border-md); border-radius: var(--r-md);
+      background: var(--surface2); color: var(--text);
     }
+    .form-group input:focus { outline: none; border-color: var(--border-strong); }
+    .sym-in { width: 90px; text-transform: uppercase; }
+    .sym-in::placeholder { text-transform: none; }
+    .num-in { width: 115px; }
 
-    .add-row { display: flex; gap: 8px; }
+    .msg { font-size: 12px; color: var(--text2); margin-top: 8px; min-height: 16px; }
+    .msg.err { color: var(--red-text); }
+    .msg.ok  { color: var(--green-text); }
 
-    .add-row input {
-      font-family: 'Space Mono', monospace;
-      font-size: 12px;
-      padding: 8px 12px;
-      border: 0.5px solid var(--border-strong);
-      border-radius: var(--radius-md);
-      background: var(--surface2);
-      color: var(--text);
-      width: 140px;
-      text-transform: uppercase;
+    /* Edit modal */
+    .modal-bg {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      z-index: 100; align-items: center; justify-content: center;
     }
-
-    .add-row input::placeholder { text-transform: none; color: var(--text3); }
-    .add-row input:focus { outline: none; }
-
-    .msg { font-size: 12px; color: var(--text2); margin-top: 8px; min-height: 18px; }
-    .msg.err { color: var(--red); }
-
-    footer {
-      margin-top: 3rem;
-      font-size: 12px;
-      color: var(--text3);
-      text-align: center;
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 0.5px solid var(--border-strong);
+      border-radius: var(--r-xl); padding: 24px; width: 320px; max-width: 95vw;
     }
+    .modal h3 { font-size: 15px; font-weight: 600; margin-bottom: 18px; }
+    .modal .form-group { margin-bottom: 12px; }
+    .modal .form-group input { width: 100%; }
+    .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
+    .up   { color: var(--green-text); }
+    .dn   { color: var(--red-text); }
+    .flat { color: var(--text2); }
+
+    footer { text-align: center; font-size: 11px; color: var(--text3); padding: 2rem 0 1.5rem; }
     footer a { color: var(--text2); }
   </style>
 </head>
 <body>
-<div class="container">
 
-  <header>
-    <h1>Market Tracker</h1>
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="logo">MKTTRACKER</span>
     <span class="badge" id="status-badge">disconnected</span>
-  </header>
-
-  <div class="key-section">
-    <label>Finnhub API Key</label>
-    <div class="key-row">
-      <input type="text" id="api-key" placeholder="Paste your key here…" />
-      <button onclick="connect()">Connect</button>
-      <button class="danger" onclick="disconnect()">Disconnect</button>
-    </div>
-    <p class="hint">Free key at <a href="https://finnhub.io" target="_blank">finnhub.io</a> — no credit card required.</p>
-    <p class="msg" id="msg"></p>
   </div>
-
-  <div class="cards" id="cards"></div>
-
-  <div class="detail-panel" id="detail-panel">
-    <div class="dp-header">
-      <div>
-        <div class="dp-sym" id="dp-sym">—</div>
-        <div class="dp-name" id="dp-name">—</div>
-      </div>
-      <div style="text-align:right">
-        <div class="dp-price" id="dp-price">—</div>
-        <div class="change flat" id="dp-change">—</div>
-      </div>
-    </div>
-    <div class="stats-grid">
-      <div class="stat"><div class="label">open</div><div class="val" id="dp-open">—</div></div>
-      <div class="stat"><div class="label">high</div><div class="val" id="dp-high">—</div></div>
-      <div class="stat"><div class="label">low</div><div class="val" id="dp-low">—</div></div>
-      <div class="stat"><div class="label">prev close</div><div class="val" id="dp-prev">—</div></div>
-      <div class="stat"><div class="label">volume</div><div class="val" id="dp-vol">—</div></div>
-      <div class="stat"><div class="label">52w high</div><div class="val" id="dp-52h">—</div></div>
-    </div>
-    <div class="chart-wrap">
-      <canvas id="mini-chart"></canvas>
-    </div>
+  <div class="topbar-right">
+    <input type="text" class="key-input" id="api-key" placeholder="Finnhub API key…" />
+    <button class="btn primary" onclick="connect()">Connect</button>
+    <button class="btn danger" onclick="disconnect()">Disconnect</button>
   </div>
-
-  <div>
-    <div class="section-label">watchlist</div>
-    <div class="watchlist" id="watchlist"></div>
-    <div class="add-row">
-      <input type="text" id="add-sym" placeholder="Add symbol (e.g. NVDA)" maxlength="10" />
-      <button onclick="addSymbol()">Add</button>
-    </div>
-  </div>
-
-  <footer>
-    Powered by <a href="https://finnhub.io" target="_blank">Finnhub</a> &mdash; prices may be delayed up to 15 seconds on free tier.
-  </footer>
-
 </div>
 
+<div class="page">
+  <div class="tabs">
+    <div class="tab active" id="tab-portfolio" onclick="showTab('portfolio')">Portfolio</div>
+    <div class="tab" id="tab-market" onclick="showTab('market')">Market</div>
+  </div>
+
+  <!-- PORTFOLIO TAB -->
+  <div id="view-portfolio">
+    <div class="summary-strip">
+      <div class="sc"><div class="sc-label">Total Value</div><div class="sc-val" id="sum-value">—</div></div>
+      <div class="sc"><div class="sc-label">Total Cost</div><div class="sc-val" id="sum-cost">—</div></div>
+      <div class="sc">
+        <div class="sc-label">Total Gain / Loss</div>
+        <div class="sc-val" id="sum-gl">—</div>
+        <div class="sc-sub flat" id="sum-gl-pct">—</div>
+      </div>
+      <div class="sc">
+        <div class="sc-label">Day Change</div>
+        <div class="sc-val" id="sum-day">—</div>
+        <div class="sc-sub flat" id="sum-day-pct">—</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Price</th>
+            <th>Day</th>
+            <th>Shares</th>
+            <th>Avg Cost</th>
+            <th>Mkt Value</th>
+            <th>Gain / Loss</th>
+            <th>Return</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="port-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Add Position</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Symbol</label>
+          <input type="text" class="sym-in" id="pos-sym" placeholder="AAPL" maxlength="10" />
+        </div>
+        <div class="form-group">
+          <label>Shares</label>
+          <input type="number" class="num-in" id="pos-shares" placeholder="10" min="0" step="any" />
+        </div>
+        <div class="form-group">
+          <label>Avg Cost / Share ($)</label>
+          <input type="number" class="num-in" id="pos-cost" placeholder="150.00" min="0" step="any" />
+        </div>
+        <button class="btn primary" style="margin-bottom:1px" onclick="addPosition()">Add</button>
+      </div>
+      <div class="msg" id="pos-msg"></div>
+    </div>
+  </div>
+
+  <!-- MARKET TAB -->
+  <div id="view-market" style="display:none">
+    <div class="market-grid" id="market-grid"></div>
+    <div class="detail-panel" id="detail-panel" style="display:none">
+      <div class="dp-header">
+        <div>
+          <div class="dp-sym" id="dp-sym">—</div>
+          <div class="dp-name" id="dp-name">—</div>
+        </div>
+        <div style="text-align:right">
+          <div class="dp-price" id="dp-price">—</div>
+          <div class="sc-sub flat" id="dp-change">—</div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat"><div class="s-label">OPEN</div><div class="s-val" id="dp-open">—</div></div>
+        <div class="stat"><div class="s-label">HIGH</div><div class="s-val" id="dp-high">—</div></div>
+        <div class="stat"><div class="s-label">LOW</div><div class="s-val" id="dp-low">—</div></div>
+        <div class="stat"><div class="s-label">PREV CLOSE</div><div class="s-val" id="dp-prev">—</div></div>
+        <div class="stat"><div class="s-label">VOLUME</div><div class="s-val" id="dp-vol">—</div></div>
+        <div class="stat"><div class="s-label">52W HIGH</div><div class="s-val" id="dp-52h">—</div></div>
+      </div>
+      <div class="chart-wrap"><canvas id="mini-chart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Watchlist</div>
+      <div class="chips" id="watchlist-chips"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Add symbol</label>
+          <input type="text" class="sym-in" id="watch-sym" placeholder="NVDA" maxlength="10" />
+        </div>
+        <button class="btn" style="margin-bottom:1px" onclick="addWatchSymbol()">Add</button>
+      </div>
+      <div class="msg" id="watch-msg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-bg" id="edit-modal">
+  <div class="modal">
+    <h3 id="edit-title">Edit Position</h3>
+    <div class="form-group">
+      <label>Shares</label>
+      <input type="number" id="edit-shares" min="0" step="any" />
+    </div>
+    <div class="form-group">
+      <label>Avg Cost / Share ($)</label>
+      <input type="number" id="edit-cost" min="0" step="any" />
+    </div>
+    <div class="modal-btns">
+      <button class="btn danger" onclick="removePosition()">Remove</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" onclick="savePosition()">Save</button>
+    </div>
+  </div>
+</div>
+
+<footer>Powered by <a href="https://finnhub.io" target="_blank">Finnhub</a> &mdash; prices may be delayed up to 15s on free tier.</footer>
+
 <script>
-  let ws = null;
-  let apiKey = '';
-  let symbols = ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'TSLA'];
-  let quotes = {};
-  let priceHistory = {};
-  let activeSymbol = null;
-  let miniChart = null;
-  let refreshInterval = null;
+let apiKey = '';
+let ws = null;
+let refreshInterval = null;
+let activeMarketSym = null;
+let miniChart = null;
+let editingSym = null;
 
-  const NAMES = {
-    AAPL:'Apple', MSFT:'Microsoft', GOOGL:'Alphabet', NVDA:'NVIDIA',
-    TSLA:'Tesla', META:'Meta', AMZN:'Amazon', AMD:'AMD', TSM:'TSMC',
-    ASML:'ASML', LMT:'Lockheed Martin', IONQ:'IonQ', INTC:'Intel',
-    NFLX:'Netflix', JPM:'JPMorgan', SPY:'S&P 500 ETF', QQQ:'Nasdaq ETF',
-    MSFT:'Microsoft', AAPL:'Apple', BRK:'Berkshire Hathaway'
-  };
+let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
+let watchlist  = JSON.parse(localStorage.getItem('mkt_watchlist')  || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
+let quotes = {};
+let priceHistory = {};
 
-  const fp = v => v == null ? '—' : '$' + Number(v).toFixed(2);
-  const fpct = v => { if (v == null) return '—'; return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; };
-  const fvol = v => {
-    if (v == null) return '—';
-    if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B';
-    if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-    if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
-    return String(v);
-  };
+const NAMES = {
+  AAPL:'Apple', MSFT:'Microsoft', GOOGL:'Alphabet', NVDA:'NVIDIA', TSLA:'Tesla',
+  META:'Meta', AMZN:'Amazon', AMD:'AMD', TSM:'TSMC', ASML:'ASML',
+  LMT:'Lockheed Martin', IONQ:'IonQ', INTC:'Intel', NFLX:'Netflix',
+  JPM:'JPMorgan', GS:'Goldman Sachs', V:'Visa', SPY:'S&P 500 ETF', QQQ:'Nasdaq ETF',
+  DIS:'Disney', ORCL:'Oracle', PLTR:'Palantir', COIN:'Coinbase'
+};
 
-  function setMsg(m, err = false) {
-    const el = document.getElementById('msg');
-    el.textContent = m;
-    el.className = 'msg' + (err ? ' err' : '');
+const f$  = v => v == null ? '—' : '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fs$ = v => { if (v == null) return '—'; return (v >= 0 ? '+$' : '-$') + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); };
+const fp  = v => { if (v == null) return '—'; return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; };
+const fv  = v => { if (!v) return '—'; if (v>=1e9) return (v/1e9).toFixed(1)+'B'; if (v>=1e6) return (v/1e6).toFixed(1)+'M'; if (v>=1e3) return (v/1e3).toFixed(0)+'K'; return v; };
+const dir = v => v == null ? 'flat' : v > 0 ? 'up' : v < 0 ? 'dn' : 'flat';
+const arr = d => d === 'up' ? '▲' : d === 'dn' ? '▼' : '';
+
+function save() {
+  localStorage.setItem('mkt_portfolio', JSON.stringify(portfolio));
+  localStorage.setItem('mkt_watchlist',  JSON.stringify(watchlist));
+}
+
+function allSyms() { return [...new Set([...Object.keys(portfolio), ...watchlist])]; }
+
+function setBadge(s) {
+  const b = document.getElementById('status-badge');
+  if (s === 'live') { b.className='badge live'; b.innerHTML='<span class="pulse"></span>live'; }
+  else if (s === 'poll') { b.className='badge live'; b.innerHTML='<span class="pulse"></span>polling'; }
+  else { b.className='badge'; b.textContent='disconnected'; }
+}
+
+function setMsg(id, txt, type='') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = txt;
+  el.className = 'msg' + (type ? ' '+type : '');
+}
+
+function showTab(tab) {
+  document.getElementById('view-portfolio').style.display = tab==='portfolio' ? '' : 'none';
+  document.getElementById('view-market').style.display    = tab==='market'    ? '' : 'none';
+  document.getElementById('tab-portfolio').className = 'tab' + (tab==='portfolio' ? ' active' : '');
+  document.getElementById('tab-market').className    = 'tab' + (tab==='market'    ? ' active' : '');
+}
+
+// ── Portfolio ──────────────────────────────────────────────────────────────
+function renderPortfolio() {
+  const tbody = document.getElementById('port-tbody');
+  tbody.innerHTML = '';
+  const syms = Object.keys(portfolio);
+
+  if (!syms.length) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px;">No positions yet — add one below.</td></tr>`;
+    setSummary(null,null,null,null,null,null); return;
   }
 
-  function setBadge(state) {
-    const b = document.getElementById('status-badge');
-    if (state === 'live') {
-      b.className = 'badge live';
-      b.innerHTML = '<span class="pulse"></span>live';
-    } else if (state === 'rest') {
-      b.className = 'badge live';
-      b.innerHTML = '<span class="pulse"></span>polling';
-    } else {
-      b.className = 'badge';
-      b.textContent = 'disconnected';
-    }
-  }
+  let totalVal=0, totalCost=0, totalDayGL=0, hasPrices=false;
 
-  function renderCards() {
-    const c = document.getElementById('cards');
-    c.innerHTML = '';
-    symbols.forEach(sym => {
-      const q = quotes[sym];
-      const pct = q ? ((q.c - q.pc) / q.pc * 100) : null;
-      const dir = pct == null ? 'flat' : pct > 0 ? 'up' : pct < 0 ? 'dn' : 'flat';
-      const arr = dir === 'up' ? '▲' : dir === 'dn' ? '▼' : '';
-      const card = document.createElement('div');
-      card.className = 'card' + (activeSymbol === sym ? ' active' : '');
-      card.innerHTML = `
-        <div class="sym">${sym}</div>
-        <div class="price">${q ? fp(q.c) : '—'}</div>
-        <div class="change ${dir}">${arr} ${fpct(pct)}</div>
-        <div class="name">${NAMES[sym] || sym}</div>
-      `;
-      card.onclick = () => selectSymbol(sym);
-      c.appendChild(card);
-    });
-  }
+  syms.forEach(sym => {
+    const pos = portfolio[sym];
+    const q   = quotes[sym];
+    const price  = q ? q.c : null;
+    const mktVal = price != null ? price * pos.shares : null;
+    const cost   = pos.avgCost * pos.shares;
+    const gl     = mktVal != null ? mktVal - cost : null;
+    const glPct  = gl != null ? (gl/cost)*100 : null;
+    const dayGL  = q ? (q.c - q.pc) * pos.shares : null;
+    const dayPct = q ? ((q.c - q.pc)/q.pc)*100 : null;
 
-  function renderWatchlist() {
-    const w = document.getElementById('watchlist');
-    w.innerHTML = '';
-    symbols.forEach(sym => {
-      const btn = document.createElement('button');
-      btn.className = 'sym-btn' + (activeSymbol === sym ? ' active' : '');
-      btn.textContent = sym;
-      btn.onclick = () => selectSymbol(sym);
-      w.appendChild(btn);
-    });
-  }
+    if (mktVal != null) { totalVal += mktVal; hasPrices = true; }
+    totalCost += cost;
+    if (dayGL != null) totalDayGL += dayGL;
 
-  function selectSymbol(sym) {
-    activeSymbol = sym;
-    renderCards();
-    renderWatchlist();
-    updateDetail();
-    if (apiKey) fetchQuote(sym);
-  }
+    const glD  = dir(gl);
+    const dayD = dir(dayGL);
 
-  function updateDetail() {
-    const sym = activeSymbol;
-    if (!sym) { document.getElementById('detail-panel').style.display = 'none'; return; }
-    document.getElementById('detail-panel').style.display = 'block';
-    const q = quotes[sym];
-    document.getElementById('dp-sym').textContent = sym;
-    document.getElementById('dp-name').textContent = NAMES[sym] || sym;
-    document.getElementById('dp-price').textContent = q ? fp(q.c) : '—';
-    const pct = q ? ((q.c - q.pc) / q.pc * 100) : null;
-    const dir = pct == null ? 'flat' : pct > 0 ? 'up' : pct < 0 ? 'dn' : 'flat';
-    const arr = dir === 'up' ? '▲' : dir === 'dn' ? '▼' : '';
-    const dpChg = document.getElementById('dp-change');
-    dpChg.textContent = `${arr} ${fpct(pct)} today`;
-    dpChg.className = 'change ' + dir;
-    document.getElementById('dp-open').textContent = q ? fp(q.o) : '—';
-    document.getElementById('dp-high').textContent = q ? fp(q.h) : '—';
-    document.getElementById('dp-low').textContent = q ? fp(q.l) : '—';
-    document.getElementById('dp-prev').textContent = q ? fp(q.pc) : '—';
-    document.getElementById('dp-vol').textContent = q ? fvol(q.v) : '—';
-    document.getElementById('dp-52h').textContent = (q && q.h52) ? fp(q.h52) : '—';
-    renderMiniChart(sym);
-  }
-
-  function renderMiniChart(sym) {
-    const hist = priceHistory[sym] || [];
-    const ctx = document.getElementById('mini-chart').getContext('2d');
-    if (miniChart) { miniChart.destroy(); miniChart = null; }
-    if (hist.length < 2) return;
-    const isUp = hist[hist.length - 1] >= hist[0];
-    const color = isUp ? '#1D9E75' : '#E24B4A';
-    miniChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: hist.map((_, i) => i),
-        datasets: [{
-          data: hist,
-          borderColor: color,
-          borderWidth: 1.5,
-          pointRadius: 0,
-          fill: true,
-          backgroundColor: isUp ? 'rgba(29,158,117,.08)' : 'rgba(226,75,74,.08)',
-          tension: 0.3
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { enabled: false } },
-        scales: {
-          x: { display: false },
-          y: { display: false, min: Math.min(...hist) * 0.998, max: Math.max(...hist) * 1.002 }
-        },
-        animation: false
-      }
-    });
-  }
-
-  async function fetchQuote(sym) {
-    if (!apiKey) return;
-    try {
-      const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`);
-      const d = await r.json();
-      if (d && d.c) {
-        quotes[sym] = d;
-        if (!priceHistory[sym]) priceHistory[sym] = [];
-        priceHistory[sym].push(d.c);
-        if (priceHistory[sym].length > 80) priceHistory[sym].shift();
-        renderCards();
-        if (activeSymbol === sym) updateDetail();
-      }
-    } catch (e) {
-      console.error('fetchQuote error:', sym, e);
-    }
-  }
-
-  async function fetchAll() {
-    for (const sym of symbols) { await fetchQuote(sym); }
-  }
-
-  function connect() {
-    apiKey = document.getElementById('api-key').value.trim();
-    if (!apiKey) { setMsg('Please paste your Finnhub API key first.', true); return; }
-
-    localStorage.setItem('finnhub_key', apiKey);
-    setMsg('Fetching quotes…');
-    setBadge('rest');
-
-    fetchAll().then(() => {
-      setBadge('rest');
-      setMsg('Quotes loaded — refreshing every 15s. Attempting WebSocket…');
-      if (!activeSymbol && symbols.length) { activeSymbol = symbols[0]; }
-      renderCards();
-      renderWatchlist();
-      updateDetail();
-      if (refreshInterval) clearInterval(refreshInterval);
-      refreshInterval = setInterval(fetchAll, 15000);
-    });
-
-    if (ws) { ws.close(); ws = null; }
-    try {
-      ws = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
-      ws.onopen = () => {
-        symbols.forEach(s => ws.send(JSON.stringify({ type: 'subscribe', symbol: s })));
-        setBadge('live');
-        setMsg('WebSocket connected — prices update in real time.');
-        if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
-      };
-      ws.onmessage = (e) => {
-        const d = JSON.parse(e.data);
-        if (d.type === 'trade' && d.data) {
-          d.data.forEach(t => {
-            const sym = t.s;
-            if (!quotes[sym]) quotes[sym] = { c: t.p, pc: t.p, o: t.p, h: t.p, l: t.p };
-            else quotes[sym].c = t.p;
-            if (!priceHistory[sym]) priceHistory[sym] = [];
-            priceHistory[sym].push(t.p);
-            if (priceHistory[sym].length > 80) priceHistory[sym].shift();
-          });
-          renderCards();
-          if (activeSymbol && d.data.find(t => t.s === activeSymbol)) updateDetail();
-        }
-      };
-      ws.onerror = () => {
-        setBadge('rest');
-        setMsg('WebSocket unavailable — falling back to 15s polling.');
-        if (!refreshInterval) refreshInterval = setInterval(fetchAll, 15000);
-      };
-      ws.onclose = () => {
-        if (!refreshInterval) refreshInterval = setInterval(fetchAll, 15000);
-      };
-    } catch (e) {
-      setMsg('WebSocket failed — using REST polling.');
-    }
-  }
-
-  function disconnect() {
-    if (ws) { ws.close(); ws = null; }
-    if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
-    setBadge('disconnected');
-    setMsg('Disconnected.');
-    localStorage.removeItem('finnhub_key');
-  }
-
-  function addSymbol() {
-    const inp = document.getElementById('add-sym');
-    const sym = inp.value.trim().toUpperCase();
-    if (!sym) return;
-    if (symbols.includes(sym)) { setMsg(sym + ' is already in your watchlist.', true); return; }
-    symbols.push(sym);
-    inp.value = '';
-    setMsg('Added ' + sym);
-    renderCards();
-    renderWatchlist();
-    if (apiKey) {
-      fetchQuote(sym).then(() => {
-        if (!activeSymbol) selectSymbol(sym);
-      });
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'subscribe', symbol: sym }));
-      }
-    }
-  }
-
-  document.getElementById('add-sym').addEventListener('keydown', e => {
-    if (e.key === 'Enter') addSymbol();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym]||''}</div></td>
+      <td class="td-mono">${price!=null?f$(price):'—'}</td>
+      <td>${dayGL!=null?`<span class="pill ${dayD}">${arr(dayD)} ${fp(dayPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+      <td class="td-mono">${pos.shares.toLocaleString()}</td>
+      <td class="td-mono">${f$(pos.avgCost)}</td>
+      <td class="td-mono">${mktVal!=null?f$(mktVal):'—'}</td>
+      <td class="td-mono ${glD}">${gl!=null?fs$(gl):'—'}</td>
+      <td>${glPct!=null?`<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+      <td><button class="btn sm" onclick="openEdit('${sym}')">Edit</button></td>
+    `;
+    tbody.appendChild(tr);
   });
 
-  // Auto-load saved key
-  const saved = localStorage.getItem('finnhub_key');
-  if (saved) {
-    document.getElementById('api-key').value = saved;
-    apiKey = saved;
-    connect();
-  }
+  const totalGL    = hasPrices ? totalVal - totalCost : null;
+  const totalGLPct = (totalGL != null && totalCost > 0) ? (totalGL/totalCost)*100 : null;
+  const totalDayPct = totalVal > 0 ? (totalDayGL/(totalVal-totalDayGL))*100 : null;
+  setSummary(hasPrices?totalVal:null, totalCost, totalGL, totalGLPct, hasPrices?totalDayGL:null, hasPrices?totalDayPct:null);
+}
 
-  renderCards();
-  renderWatchlist();
+function setSummary(val, cost, gl, glPct, dayGL, dayPct) {
+  document.getElementById('sum-value').textContent = val!=null ? f$(val) : '—';
+  document.getElementById('sum-cost').textContent  = cost!=null ? f$(cost) : '—';
+  const glEl=document.getElementById('sum-gl'), glPEl=document.getElementById('sum-gl-pct');
+  glEl.textContent = gl!=null?fs$(gl):'—'; glEl.className='sc-val '+(gl!=null?dir(gl):'flat');
+  glPEl.textContent = glPct!=null?fp(glPct):'—'; glPEl.className='sc-sub '+(glPct!=null?dir(glPct):'flat');
+  const dEl=document.getElementById('sum-day'), dPEl=document.getElementById('sum-day-pct');
+  dEl.textContent = dayGL!=null?fs$(dayGL):'—'; dEl.className='sc-val '+(dayGL!=null?dir(dayGL):'flat');
+  dPEl.textContent = dayPct!=null?fp(dayPct):'—'; dPEl.className='sc-sub '+(dayPct!=null?dir(dayPct):'flat');
+}
+
+// ── Market ─────────────────────────────────────────────────────────────────
+function renderMarket() {
+  const grid = document.getElementById('market-grid');
+  grid.innerHTML = '';
+  watchlist.forEach(sym => {
+    const q   = quotes[sym];
+    const pct = q ? ((q.c-q.pc)/q.pc*100) : null;
+    const d   = dir(pct);
+    const card = document.createElement('div');
+    card.className = 'mcard' + (activeMarketSym===sym?' active':'');
+    card.innerHTML = `
+      <div class="mc-sym">${sym}</div>
+      <div class="mc-price ${d}">${q?f$(q.c):'—'}</div>
+      <div class="mc-change ${d}">${pct!=null?arr(d)+' '+fp(pct):'—'}</div>
+      <div class="mc-name">${NAMES[sym]||sym}</div>
+    `;
+    card.onclick = () => selectSym(sym);
+    grid.appendChild(card);
+  });
+}
+
+function renderChips() {
+  const wrap = document.getElementById('watchlist-chips');
+  wrap.innerHTML = '';
+  watchlist.forEach(sym => {
+    const btn = document.createElement('button');
+    btn.className = 'chip' + (activeMarketSym===sym?' active':'');
+    btn.textContent = sym;
+    btn.onclick = () => selectSym(sym);
+    wrap.appendChild(btn);
+  });
+}
+
+function selectSym(sym) {
+  activeMarketSym = sym;
+  renderMarket(); renderChips(); updateDetail(sym);
+  if (apiKey) fetchQuote(sym);
+}
+
+function updateDetail(sym) {
+  if (!sym) { document.getElementById('detail-panel').style.display='none'; return; }
+  document.getElementById('detail-panel').style.display='block';
+  const q = quotes[sym];
+  document.getElementById('dp-sym').textContent  = sym;
+  document.getElementById('dp-name').textContent = NAMES[sym]||sym;
+  document.getElementById('dp-price').textContent = q?f$(q.c):'—';
+  const pct = q?((q.c-q.pc)/q.pc*100):null;
+  const d   = dir(pct);
+  const dpC = document.getElementById('dp-change');
+  dpC.textContent = pct!=null?`${arr(d)} ${fp(pct)} today`:'—';
+  dpC.className = 'sc-sub '+d;
+  document.getElementById('dp-open').textContent = q?f$(q.o):'—';
+  document.getElementById('dp-high').textContent = q?f$(q.h):'—';
+  document.getElementById('dp-low').textContent  = q?f$(q.l):'—';
+  document.getElementById('dp-prev').textContent = q?f$(q.pc):'—';
+  document.getElementById('dp-vol').textContent  = q?fv(q.v):'—';
+  document.getElementById('dp-52h').textContent  = q&&q.h52?f$(q.h52):'—';
+  renderMiniChart(sym);
+}
+
+function renderMiniChart(sym) {
+  const hist = priceHistory[sym]||[];
+  const ctx  = document.getElementById('mini-chart').getContext('2d');
+  if (miniChart) { miniChart.destroy(); miniChart=null; }
+  if (hist.length < 2) return;
+  const isUp  = hist[hist.length-1] >= hist[0];
+  const color = isUp ? '#1a9470' : '#d94545';
+  miniChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: hist.map((_,i)=>i), datasets:[{data:hist,borderColor:color,borderWidth:1.5,pointRadius:0,fill:true,backgroundColor:isUp?'rgba(26,148,112,.07)':'rgba(217,69,69,.07)',tension:.3}] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{x:{display:false},y:{display:false,min:Math.min(...hist)*.998,max:Math.max(...hist)*1.002}}, animation:false }
+  });
+}
+
+// ── Add / edit position ────────────────────────────────────────────────────
+function addPosition() {
+  const sym    = document.getElementById('pos-sym').value.trim().toUpperCase();
+  const shares = parseFloat(document.getElementById('pos-shares').value);
+  const cost   = parseFloat(document.getElementById('pos-cost').value);
+  if (!sym)                         { setMsg('pos-msg','Enter a symbol.','err'); return; }
+  if (isNaN(shares)||shares<=0)     { setMsg('pos-msg','Enter a valid share count.','err'); return; }
+  if (isNaN(cost)||cost<=0)         { setMsg('pos-msg','Enter a valid avg cost.','err'); return; }
+  portfolio[sym] = { shares, avgCost: cost };
+  if (!watchlist.includes(sym)) watchlist.push(sym);
+  save();
+  document.getElementById('pos-sym').value='';
+  document.getElementById('pos-shares').value='';
+  document.getElementById('pos-cost').value='';
+  setMsg('pos-msg',`Added ${sym} — ${shares} shares @ ${f$(cost)}`,'ok');
+  renderPortfolio(); renderMarket(); renderChips();
+  if (apiKey) {
+    fetchQuote(sym);
+    if (ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'subscribe',symbol:sym}));
+  }
+}
+
+function openEdit(sym) {
+  editingSym = sym;
+  const pos = portfolio[sym];
+  document.getElementById('edit-title').textContent = `Edit ${sym}`;
+  document.getElementById('edit-shares').value = pos.shares;
+  document.getElementById('edit-cost').value   = pos.avgCost;
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeModal() { document.getElementById('edit-modal').classList.remove('open'); editingSym=null; }
+
+function savePosition() {
+  if (!editingSym) return;
+  const shares = parseFloat(document.getElementById('edit-shares').value);
+  const cost   = parseFloat(document.getElementById('edit-cost').value);
+  if (isNaN(shares)||shares<=0||isNaN(cost)||cost<=0) return;
+  portfolio[editingSym] = { shares, avgCost: cost };
+  save(); closeModal(); renderPortfolio();
+}
+
+function removePosition() {
+  if (!editingSym) return;
+  delete portfolio[editingSym];
+  save(); closeModal(); renderPortfolio();
+}
+
+document.getElementById('edit-modal').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
+
+// ── Add watchlist ──────────────────────────────────────────────────────────
+function addWatchSymbol() {
+  const sym = document.getElementById('watch-sym').value.trim().toUpperCase();
+  if (!sym) return;
+  if (watchlist.includes(sym)) { setMsg('watch-msg', sym+' already in watchlist.','err'); return; }
+  watchlist.push(sym); save();
+  document.getElementById('watch-sym').value='';
+  setMsg('watch-msg','Added '+sym,'ok');
+  renderMarket(); renderChips();
+  if (apiKey) {
+    fetchQuote(sym);
+    if (ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'subscribe',symbol:sym}));
+  }
+}
+
+document.getElementById('watch-sym').addEventListener('keydown', e=>{ if(e.key==='Enter') addWatchSymbol(); });
+document.getElementById('pos-sym').addEventListener('keydown',   e=>{ if(e.key==='Enter') document.getElementById('pos-shares').focus(); });
+document.getElementById('pos-shares').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('pos-cost').focus(); });
+document.getElementById('pos-cost').addEventListener('keydown',   e=>{ if(e.key==='Enter') addPosition(); });
+
+// ── Data ───────────────────────────────────────────────────────────────────
+async function fetchQuote(sym) {
+  if (!apiKey) return;
+  try {
+    const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`);
+    const d = await r.json();
+    if (d&&d.c) {
+      quotes[sym] = d;
+      if (!priceHistory[sym]) priceHistory[sym]=[];
+      priceHistory[sym].push(d.c);
+      if (priceHistory[sym].length>80) priceHistory[sym].shift();
+      renderPortfolio(); renderMarket();
+      if (activeMarketSym===sym) updateDetail(sym);
+    }
+  } catch(e) { console.error(sym, e); }
+}
+
+async function fetchAll() { for (const s of allSyms()) await fetchQuote(s); }
+
+function connect() {
+  apiKey = document.getElementById('api-key').value.trim();
+  if (!apiKey) { alert('Paste your Finnhub API key.'); return; }
+  localStorage.setItem('finnhub_key', apiKey);
+  setBadge('poll');
+  fetchAll().then(()=>{ setBadge('poll'); if (!refreshInterval) refreshInterval=setInterval(fetchAll,15000); });
+
+  if (ws) { ws.close(); ws=null; }
+  try {
+    ws = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
+    ws.onopen = () => {
+      allSyms().forEach(s=>ws.send(JSON.stringify({type:'subscribe',symbol:s})));
+      setBadge('live');
+      if (refreshInterval) { clearInterval(refreshInterval); refreshInterval=null; }
+    };
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type==='trade'&&data.data) {
+        data.data.forEach(t=>{
+          const s=t.s;
+          if (!quotes[s]) quotes[s]={c:t.p,pc:t.p,o:t.p,h:t.p,l:t.p};
+          else quotes[s].c=t.p;
+          if (!priceHistory[s]) priceHistory[s]=[];
+          priceHistory[s].push(t.p);
+          if (priceHistory[s].length>80) priceHistory[s].shift();
+        });
+        renderPortfolio(); renderMarket();
+        if (activeMarketSym&&data.data.find(t=>t.s===activeMarketSym)) updateDetail(activeMarketSym);
+      }
+    };
+    ws.onerror = ()=>{ setBadge('poll'); if (!refreshInterval) refreshInterval=setInterval(fetchAll,15000); };
+    ws.onclose = ()=>{ if (!refreshInterval) refreshInterval=setInterval(fetchAll,15000); };
+  } catch(e) { setBadge('poll'); if (!refreshInterval) refreshInterval=setInterval(fetchAll,15000); }
+}
+
+function disconnect() {
+  if (ws) { ws.close(); ws=null; }
+  if (refreshInterval) { clearInterval(refreshInterval); refreshInterval=null; }
+  setBadge('disconnected');
+  localStorage.removeItem('finnhub_key');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+renderPortfolio(); renderMarket(); renderChips();
+const savedKey = localStorage.getItem('finnhub_key');
+if (savedKey) { document.getElementById('api-key').value=savedKey; apiKey=savedKey; connect(); }
 </script>
 </body>
 </html>
