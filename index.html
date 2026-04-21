@@ -86,8 +86,7 @@
       border-radius: var(--r-xl); padding: 18px 20px 14px; margin-bottom: 1.25rem;
     }
     .port-chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
-    .port-chart-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
-    .port-chart-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .port-chart-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }    .port-chart-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
     .port-chart-right { text-align: right; }
     .port-chart-val { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; display: block; }
     .port-chart-delta { font-size: 12px; font-weight: 600; margin-top: 2px; display: block; }
@@ -272,7 +271,7 @@
     <div class="port-chart-wrap" id="port-chart-wrap" style="display:none">
       <div class="port-chart-header">
         <div>
-          <div class="port-chart-title">Portfolio Value</div>
+          <div class="port-chart-title">Today's P&amp;L</div>
           <div class="port-chart-sub" id="port-chart-sub">Live session</div>
         </div>
         <div class="port-chart-right">
@@ -624,8 +623,8 @@ function setSummary(val,cost,gl,glPct,dayGL,dayPct){
   const dEl=document.getElementById('sum-day'),dPEl=document.getElementById('sum-day-pct');
   dEl.textContent=dayGL!=null?fs$(dayGL):'—'; dEl.className='sc-val '+(dayGL!=null?dir(dayGL):'flat');
   dPEl.textContent=dayPct!=null?fp(dayPct):'—'; dPEl.className='sc-sub '+(dayPct!=null?dir(dayPct):'flat');
-  // Push to live chart whenever we have a real value
-  if(val!=null) pushPortfolioPoint(val);
+  // Push day change to live chart
+  if(dayGL!=null) pushPortfolioPoint(dayGL);
 }
 
 // ── Live portfolio chart ───────────────────────────────────────────────────
@@ -649,16 +648,18 @@ function renderPortChart() {
   wrap.style.display='';
 
   const vals = portHistory.map(p=>p.v);
-  const first = vals[0], last = vals[vals.length-1];
-  const delta = last - first, deltaPct = (delta/first)*100;
-  const isUp = delta >= 0;
+  const last = vals[vals.length-1];
+  const isUp = last >= 0;
   const color = isUp ? '#1a9470' : '#d94545';
   const colorBg = isUp ? 'rgba(26,148,112,0.07)' : 'rgba(217,69,69,0.07)';
 
   // Header stats
-  document.getElementById('port-chart-val').textContent = f$(last);
+  const valEl = document.getElementById('port-chart-val');
+  valEl.textContent = fs$(last);
+  valEl.style.color = isUp ? 'var(--green-text)' : 'var(--red-text)';
   const deltaEl = document.getElementById('port-chart-delta');
-  deltaEl.textContent = `${isUp?'+':''}${fs$(delta).replace('$','')} (${fp(deltaPct)}) this session`;
+  const dayPctText = document.getElementById('sum-day-pct')?.textContent || '';
+  deltaEl.textContent = (dayPctText && dayPctText !== '—' ? dayPctText + ' ' : '') + 'today vs prev close';
   deltaEl.style.color = isUp ? 'var(--green-text)' : 'var(--red-text)';
 
   // Time labels
@@ -704,7 +705,7 @@ function renderPortChart() {
         tooltip: {
           callbacks: {
             title: items => items[0].label,
-            label: item => ' ' + f$(item.parsed.y)
+            label: item => ' ' + fs$(item.parsed.y)
           },
           backgroundColor: 'var(--surface)',
           borderColor: 'var(--border-md)',
@@ -733,11 +734,16 @@ function renderPortChart() {
           ticks: {
             color: 'rgba(160,157,148,0.8)',
             font: { size: 10, family: "'Space Mono', monospace" },
-            maxTicksLimit: 4,
-            callback: v => '$' + (v>=1000 ? (v/1000).toFixed(1)+'k' : v.toFixed(0))
+            maxTicksLimit: 5,
+            callback: v => {
+              const abs = Math.abs(v);
+              const str = abs >= 1000 ? (abs/1000).toFixed(1)+'k' : abs.toFixed(0);
+              return (v >= 0 ? '+$' : '-$') + str;
+            }
           },
           grid: {
-            color: 'rgba(160,157,148,0.1)',
+            color: ctx => ctx.tick.value === 0 ? 'rgba(160,157,148,0.4)' : 'rgba(160,157,148,0.08)',
+            lineWidth: ctx => ctx.tick.value === 0 ? 1.5 : 1,
             drawBorder: false
           },
           border: { display: false }
