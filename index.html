@@ -237,7 +237,9 @@
   <!-- ══ PORTFOLIO TAB ══ -->
   <div id="view-portfolio">
     <div class="summary-strip">
-      <div class="sc"><div class="sc-label">Total Value</div><div class="sc-val" id="sum-value">—</div></div>
+      <div class="sc"><div class="sc-label">Invested Value</div><div class="sc-val" id="sum-value">—</div></div>
+      <div class="sc"><div class="sc-label">Cash Balance</div><div class="sc-val" id="sum-cash">$0.00</div><div class="sc-sub" style="margin-top:6px;display:flex;gap:6px;align-items:center"><input type="number" id="cash-input" placeholder="0.00" min="0" step="any" style="font-family:'Space Mono',monospace;font-size:11px;padding:3px 6px;border:0.5px solid var(--border-md);border-radius:var(--r-md);background:var(--surface2);color:var(--text);width:90px" /><button class="btn sm" onclick="setCash()">Set</button></div></div>
+      <div class="sc"><div class="sc-label">Total Account</div><div class="sc-val" id="sum-total">—</div></div>
       <div class="sc"><div class="sc-label">Total Cost</div><div class="sc-val" id="sum-cost">—</div></div>
       <div class="sc">
         <div class="sc-label">Total Gain / Loss</div>
@@ -260,6 +262,7 @@
           </tr>
         </thead>
         <tbody id="port-tbody"></tbody>
+        <tfoot id="port-tfoot"></tfoot>
       </table>
     </div>
 
@@ -404,6 +407,7 @@ let activeMarketSym = null, miniChart = null, donutChart = null, editingSym = nu
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
 let watchlist  = JSON.parse(localStorage.getItem('mkt_watchlist')  || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
+let cashBalance = parseFloat(localStorage.getItem('mkt_cash') || '0');
 let quotes = {}, priceHistory = {};
 
 const NAMES = {
@@ -448,6 +452,7 @@ const arr = d => d==='up'?'▲':d==='dn'?'▼':'';
 function save() {
   localStorage.setItem('mkt_portfolio', JSON.stringify(portfolio));
   localStorage.setItem('mkt_watchlist',  JSON.stringify(watchlist));
+  localStorage.setItem('mkt_cash', String(cashBalance));
 }
 function allSyms() { return [...new Set([...Object.keys(portfolio),...watchlist])]; }
 
@@ -469,6 +474,17 @@ function showTab(tab) {
 }
 
 // ── Portfolio tab ──────────────────────────────────────────────────────────
+function setCash(){
+  const val = parseFloat(document.getElementById('cash-input').value);
+  if(isNaN(val)||val<0) return;
+  cashBalance = val;
+  save();
+  document.getElementById('cash-input').value='';
+  renderPortfolio();
+  if(document.getElementById('view-breakdown').style.display!=='none') renderBreakdown();
+}
+document.getElementById('cash-input').addEventListener('keydown',e=>{if(e.key==='Enter')setCash();});
+
 function renderPortfolio() {
   const tbody = document.getElementById('port-tbody');
   tbody.innerHTML = '';
@@ -506,10 +522,25 @@ function renderPortfolio() {
   const totalGLPct=(totalGL!=null&&totalCost>0)?(totalGL/totalCost)*100:null;
   const totalDayPct=totalVal>0?(totalDayGL/(totalVal-totalDayGL))*100:null;
   setSummary(hasPrices?totalVal:null,totalCost,totalGL,totalGLPct,hasPrices?totalDayGL:null,hasPrices?totalDayPct:null);
+
+  // Cash row in table footer
+  const tfoot = document.getElementById('port-tfoot');
+  tfoot.innerHTML = cashBalance>0 ? `
+    <tr style="border-top:0.5px solid var(--border-md);background:var(--surface2)">
+      <td colspan="5" style="padding:11px 16px;text-align:left">
+        <div class="td-sym" style="color:var(--text2)">CASH</div>
+        <div class="td-name">Available balance</div>
+      </td>
+      <td class="td-mono" style="padding:11px 16px">${f$(cashBalance)}</td>
+      <td colspan="3" style="padding:11px 16px"></td>
+    </tr>` : '';
 }
 
 function setSummary(val,cost,gl,glPct,dayGL,dayPct){
   document.getElementById('sum-value').textContent=val!=null?f$(val):'—';
+  document.getElementById('sum-cash').textContent=f$(cashBalance);
+  const total = val!=null ? val+cashBalance : null;
+  document.getElementById('sum-total').textContent=total!=null?f$(total):'—';
   document.getElementById('sum-cost').textContent=cost!=null?f$(cost):'—';
   const glEl=document.getElementById('sum-gl'),glPEl=document.getElementById('sum-gl-pct');
   glEl.textContent=gl!=null?fs$(gl):'—'; glEl.className='sc-val '+(gl!=null?dir(gl):'flat');
@@ -540,12 +571,16 @@ function renderBreakdown() {
     totalVal+=mktVal;
     return { sym, mktVal, cost, gl, glPct, dayPct, sector: SECTORS[sym]||'Other' };
   });
+  // Add cash as a position for allocation chart purposes
+  if(cashBalance>0) totalVal+=cashBalance;
   posData.forEach(p=>{ p.weight=(p.mktVal/totalVal)*100; });
   posData.sort((a,b)=>b.mktVal-a.mktVal);
+  // Cash entry for donut (kept separate so it doesn't affect movers/GL calcs)
+  const cashEntry = cashBalance>0 ? { sym:'CASH', mktVal:cashBalance, weight:(cashBalance/totalVal)*100, isCash:true } : null;
 
   renderInsightCards(posData, totalVal);
-  renderDonut(posData);
-  renderAllocationLegend(posData);
+  renderDonut(posData, cashEntry);
+  renderAllocationLegend(posData, cashEntry);
   renderSectors(posData);
   renderConcentration(posData);
   renderMovers(posData);
@@ -586,12 +621,13 @@ function renderInsightCards(posData, totalVal) {
   `).join('');
 }
 
-function renderDonut(posData) {
+function renderDonut(posData, cashEntry) {
   const ctx = document.getElementById('donut-chart').getContext('2d');
   if(donutChart){ donutChart.destroy(); donutChart=null; }
-  const labels = posData.map(p=>p.sym);
-  const data   = posData.map(p=>parseFloat(p.weight.toFixed(2)));
-  const colors = posData.map((_,i)=>PALETTE[i%PALETTE.length]);
+  const allEntries = cashEntry ? [...posData, cashEntry] : posData;
+  const labels = allEntries.map(p=>p.sym);
+  const data   = allEntries.map(p=>parseFloat(p.weight.toFixed(2)));
+  const colors = allEntries.map((p,i)=> p.isCash ? '#888780' : PALETTE[i%PALETTE.length]);
 
   donutChart = new Chart(ctx, {
     type: 'doughnut',
@@ -600,11 +636,7 @@ function renderDonut(posData) {
       responsive:true, maintainAspectRatio:true, cutout:'72%',
       plugins:{
         legend:{display:false},
-        tooltip:{
-          callbacks:{
-            label: ctx => ` ${ctx.label}  ${ctx.parsed.toFixed(1)}%`
-          }
-        }
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}  ${ctx.parsed.toFixed(1)}%` } }
       },
       animation:{ duration:500 }
     }
@@ -612,14 +644,15 @@ function renderDonut(posData) {
   document.getElementById('donut-center-val').textContent = posData.length;
 }
 
-function renderAllocationLegend(posData) {
-  const top = posData.slice(0,8);
+function renderAllocationLegend(posData, cashEntry) {
+  const allEntries = cashEntry ? [...posData, cashEntry] : posData;
+  const top = allEntries.slice(0,9);
   document.getElementById('alloc-legend').innerHTML = top.map((p,i)=>`
     <div class="alloc-row">
-      <div class="alloc-dot" style="background:${PALETTE[i%PALETTE.length]}"></div>
+      <div class="alloc-dot" style="background:${p.isCash?'#888780':PALETTE[i%PALETTE.length]}"></div>
       <div class="alloc-sym">${p.sym}</div>
       <div class="alloc-bar-wrap">
-        <div class="alloc-bar" style="width:${p.weight.toFixed(1)}%;background:${PALETTE[i%PALETTE.length]}"></div>
+        <div class="alloc-bar" style="width:${p.weight.toFixed(1)}%;background:${p.isCash?'#888780':PALETTE[i%PALETTE.length]}"></div>
       </div>
       <div class="alloc-pct">${p.weight.toFixed(1)}%</div>
     </div>
