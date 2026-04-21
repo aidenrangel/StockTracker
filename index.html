@@ -268,7 +268,6 @@
             <th onclick="sortBy('mktVal')">Mkt Value</th>
             <th onclick="sortBy('gl')">Gain / Loss</th>
             <th onclick="sortBy('glPct')">Return</th>
-            <th onclick="sortBy('athPct')" title="% below 52-week high (best available on free API tier)">vs 52W High</th>
             <th></th>
           </tr>
         </thead>
@@ -490,7 +489,7 @@ function sortBy(col){
 
 function updateSortHeaders(){
   const ths=document.querySelectorAll('#port-thead th');
-  const colMap=['sym','price','day','shares','avgCost','mktVal','gl','glPct','athPct'];
+  const colMap=['sym','price','day','shares','avgCost','mktVal','gl','glPct'];
   ths.forEach((th,i)=>{
     th.classList.remove('sort-asc','sort-desc');
     if(colMap[i]===sortCol) th.classList.add(sortDir===1?'sort-asc':'sort-desc');
@@ -502,7 +501,7 @@ function renderPortfolio() {
   tbody.innerHTML = '';
   const syms = Object.keys(portfolio);
   if(!syms.length){
-    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px;">No positions yet — add one below.</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px;">No positions yet — add one below.</td></tr>`;
     setSummary(null,null,null,null,null,null); updateSortHeaders(); return;
   }
 
@@ -562,13 +561,9 @@ function renderPortfolio() {
         <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
         <td class="td-mono">${f$(pos.shares)}</td>
         <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
-        <td style="color:var(--text3)">—</td>
         <td><button class="btn sm" onclick="openEdit('${sym}')">Edit</button></td>
       `;
     } else {
-      const athCell=ath==null
-        ?'<span style="color:var(--text3);font-size:11px">…</span>'
-        :`<span class="pill ${athD}" title="52-week high: ${f$(ath)}">${arr(athD)} ${fp(athPct)}</span>`;
       tr.innerHTML=`
         <td><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym]||''}</div></td>
         <td class="td-mono">${price!=null?f$(price):'—'}</td>
@@ -578,7 +573,6 @@ function renderPortfolio() {
         <td class="td-mono">${mktVal!=null?f$(mktVal):'—'}</td>
         <td class="td-mono ${glD}">${gl!=null?fs$(gl):'—'}</td>
         <td>${glPct!=null?`<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
-        <td>${athCell}</td>
         <td><button class="btn sm" onclick="openEdit('${sym}')">Edit</button></td>
       `;
     }
