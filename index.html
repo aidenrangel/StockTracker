@@ -256,7 +256,7 @@
         <thead>
           <tr>
             <th>Symbol</th><th>Price</th><th>Day</th><th>Shares</th>
-            <th>Avg Cost</th><th>Mkt Value</th><th>Gain / Loss</th><th>Return</th><th></th>
+            <th>Avg Cost</th><th>Mkt Value</th><th>Gain / Loss</th><th>Return</th><th title="% below 52-week high (best available on free API tier)">vs 52W High</th><th></th>
           </tr>
         </thead>
         <tbody id="port-tbody"></tbody>
@@ -404,7 +404,7 @@ let activeMarketSym = null, miniChart = null, donutChart = null, editingSym = nu
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
 let watchlist  = JSON.parse(localStorage.getItem('mkt_watchlist')  || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
-let quotes = {}, priceHistory = {};
+let quotes = {}, priceHistory = {}, athData = {};
 
 const NAMES = {
   AAPL:'Apple', MSFT:'Microsoft', GOOGL:'Alphabet', NVDA:'NVIDIA', TSLA:'Tesla',
@@ -504,9 +504,16 @@ function renderPortfolio() {
         <td class="td-mono">${f$(pos.shares)}</td>
         <td class="td-mono" style="color:var(--text3)">—</td>
         <td><span style="color:var(--text3)">—</span></td>
+        <td style="color:var(--text3)">—</td>
         <td><button class="btn sm" onclick="openEdit('${sym}')">Edit</button></td>
       `;
     } else {
+      const ath=athData[sym]||null;
+      const athPct=ath&&price!=null?((price-ath)/ath)*100:null;
+      const athD=dir(athPct);
+      const athCell=ath==null
+        ?'<span style="color:var(--text3);font-size:11px">loading…</span>'
+        :athPct!=null?`<span class="pill ${athD}" title="52-week high: ${f$(ath)}">${arr(athD)} ${fp(athPct)}</span>`:'—';
       tr.innerHTML=`
         <td><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym]||''}</div></td>
         <td class="td-mono">${price!=null?f$(price):'—'}</td>
@@ -516,6 +523,7 @@ function renderPortfolio() {
         <td class="td-mono">${mktVal!=null?f$(mktVal):'—'}</td>
         <td class="td-mono ${glD}">${gl!=null?fs$(gl):'—'}</td>
         <td>${glPct!=null?`<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+        <td>${athCell}</td>
         <td><button class="btn sm" onclick="openEdit('${sym}')">Edit</button></td>
       `;
     }
@@ -815,7 +823,7 @@ function addPosition(){
   document.getElementById('pos-cost').value='';
   setMsg('pos-msg',`Added ${sym} — ${shares} shares @ ${f$(cost)}`,'ok');
   renderPortfolio(); renderMarket(); renderChips();
-  if(apiKey){ fetchQuote(sym); if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'subscribe',symbol:sym})); }
+  if(apiKey){ fetchQuote(sym); fetchATH(sym); if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'subscribe',symbol:sym})); }
 }
 function openEdit(sym){
   editingSym=sym;
@@ -883,12 +891,32 @@ async function fetchQuote(sym){
 }
 async function fetchAll(){ for(const s of allSyms()) await fetchQuote(s); }
 
+async function fetchATH(sym){
+  if(!apiKey||sym==='CASH') return;
+  if(athData[sym]!=null) return; // already fetched
+  try{
+    const r=await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${sym}&metric=all&token=${apiKey}`);
+    const d=await r.json();
+    if(d&&d.metric){
+      // Best available on free tier: 52-week high
+      const high=d.metric['52WeekHigh']||null;
+      if(high) athData[sym]=high;
+      renderPortfolio();
+    }
+  }catch(e){console.error('fetchATH',sym,e);}
+}
+
+async function fetchAllATH(){
+  const stockSyms=Object.keys(portfolio).filter(s=>s!=='CASH');
+  for(const s of stockSyms){ await fetchATH(s); }
+}
+
 function connect(){
   apiKey=document.getElementById('api-key').value.trim();
   if(!apiKey){alert('Paste your Finnhub API key.');return;}
   localStorage.setItem('finnhub_key',apiKey);
   setBadge('poll');
-  fetchAll().then(()=>{setBadge('poll');if(!refreshInterval)refreshInterval=setInterval(fetchAll,15000);});
+  fetchAll().then(()=>{setBadge('poll');if(!refreshInterval)refreshInterval=setInterval(fetchAll,15000);fetchAllATH();});
   if(ws){ws.close();ws=null;}
   try{
     ws=new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
