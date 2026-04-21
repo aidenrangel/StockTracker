@@ -1170,6 +1170,41 @@ document.getElementById('pos-shares').addEventListener('keydown',e=>{if(e.key===
 document.getElementById('pos-cost').addEventListener('keydown',e=>{if(e.key==='Enter')addPosition();});
 
 // ── Data fetching ──────────────────────────────────────────────────────────
+
+function isAfterHours() {
+  const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const et = new Date(etStr);
+  const mins = et.getHours() * 60 + et.getMinutes();
+  return mins < 9 * 60 + 30 || mins >= 16 * 60;
+}
+
+// Fetch after-hours price from Yahoo Finance via corsproxy.io
+async function fetchYahooPrice(sym) {
+  if(sym === 'CASH') return;
+  try {
+    const r = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1m&range=1d`)}`);
+    const d = await r.json();
+    const meta = d?.chart?.result?.[0]?.meta;
+    if(!meta) return;
+    // Use postMarketPrice if available, otherwise regularMarketPrice
+    const price = meta.postMarketPrice || meta.regularMarketPrice;
+    if(price && quotes[sym]) {
+      quotes[sym].c = price;
+      if(!priceHistory[sym]) priceHistory[sym] = [];
+      priceHistory[sym].push(price);
+      if(priceHistory[sym].length > 80) priceHistory[sym].shift();
+      renderPortfolio(); renderMarket();
+      if(activeMarketSym === sym) updateDetail(sym);
+      if(document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
+    }
+  } catch(e) { console.error('yahoo', sym, e); }
+}
+
+async function fetchAllYahoo() {
+  const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
+  await Promise.all(stockSyms.map(s => fetchYahooPrice(s)));
+}
+
 async function fetchQuote(sym){
   if(!apiKey)return;
   try{
@@ -1182,12 +1217,16 @@ async function fetchQuote(sym){
       if(priceHistory[sym].length>80)priceHistory[sym].shift();
       renderPortfolio(); renderMarket();
       if(activeMarketSym===sym)updateDetail(sym);
-      // Re-render breakdown if visible
       if(document.getElementById('view-breakdown').style.display!=='none') renderBreakdown();
     }
   }catch(e){console.error(sym,e);}
 }
-async function fetchAll(){ for(const s of allSyms()) await fetchQuote(s); }
+
+async function fetchAll(){
+  for(const s of allSyms()) await fetchQuote(s);
+  // After market hours, layer in Yahoo Finance prices
+  if(isAfterHours()) await fetchAllYahoo();
+}
 
 async function fetchATH(sym){
   if(!apiKey||sym==='CASH') return;
