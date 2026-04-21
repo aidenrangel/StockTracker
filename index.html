@@ -1206,17 +1206,26 @@ async function fetchATH(sym){
 
 async function fetchPrevClose(sym) {
   if(!apiKey || sym === 'CASH') return;
-  if(prevClose[sym] != null) return; // already have it
+  if(prevClose[sym] != null) return;
   try {
-    // Fetch last 2 daily candles — index 0 is prev close, index 1 is today
-    const to   = Math.floor(Date.now() / 1000);
-    const from = to - 7 * 24 * 3600; // 7 days back to handle weekends/holidays
+    const now = new Date();
+    const to = Math.floor(now.getTime() / 1000);
+    // Go back 5 days to safely cover weekends and holidays
+    const from = to - 5 * 24 * 3600;
     const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=D&from=${from}&to=${to}&token=${apiKey}`);
     const d = await r.json();
-    if(d && d.s === 'ok' && d.c && d.c.length >= 2) {
-      // Second-to-last candle is the previous trading day's close
-      prevClose[sym] = d.c[d.c.length - 2];
-      renderPortfolio();
+    if(d && d.s === 'ok' && d.t && d.c && d.c.length >= 1) {
+      // Find the most recent candle that is NOT today
+      const todayMidnightUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      let pc = null;
+      for(let i = d.t.length - 1; i >= 0; i--) {
+        const candleDate = d.t[i] * 1000;
+        if(candleDate < todayMidnightUTC) {
+          pc = d.c[i];
+          break;
+        }
+      }
+      if(pc != null) { prevClose[sym] = pc; renderPortfolio(); }
     }
   } catch(e) { console.error('fetchPrevClose', sym, e); }
 }
