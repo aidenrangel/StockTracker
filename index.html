@@ -642,94 +642,7 @@ function pushPortfolioPoint(val, t=null, seeding=false) {
   renderPortChart();
 }
 
-// ── Intraday history loader ────────────────────────────────────────────────
-// Fetches 1-min candles from market open for each stock, reconstructs portfolio P&L per minute
-async function loadIntradayHistory() {
-  const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
-  if(!stockSyms.length) return;
-
-  // Market open: 9:30 AM ET in unix seconds
-  const now = new Date();
-  const etOffset = -5 * 3600; // ET is UTC-5 (approximate; good enough for market hours)
-  const etNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60 + etOffset) * -1000 * 0);
-  // Get today's market open timestamp in unix (9:30 AM ET)
-  const todayET = new Date(now.toLocaleDateString('en-US', {timeZone:'America/New_York'}));
-  const marketOpen = new Date(todayET);
-  marketOpen.setHours(9, 30, 0, 0);
-  // Convert to ET unix
-  const marketOpenET = Math.floor(marketOpen.getTime() / 1000) + (new Date().getTimezoneOffset() * 60) - (5 * 3600);
-  // Actually use a reliable approach: just use timestamps
-  const nowUnix = Math.floor(Date.now() / 1000);
-  // 9:30 AM ET = 14:30 UTC (EST) or 13:30 UTC (EDT)
-  // Detect DST: in summer ET = UTC-4, winter ET = UTC-5
-  const jan = new Date(now.getFullYear(), 0, 1).getTimezoneOffset();
-  const jul = new Date(now.getFullYear(), 6, 1).getTimezoneOffset();
-  const isDST = Math.min(jan, jul) !== jan;
-  const etUtcOffset = isDST ? 4 : 5; // hours behind UTC
-  const todayUtcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const openUnix = Math.floor(todayUtcMidnight.getTime() / 1000) + (9 * 3600 + 30 * 60) + etUtcOffset * 3600;
-
-  if(nowUnix < openUnix) {
-    // Market hasn't opened yet today — nothing to load
-    return;
-  }
-
-  // Fetch candles for each stock position
-  const candleMap = {}; // sym -> [{t, c}]
-  await Promise.all(stockSyms.map(async sym => {
-    try {
-      const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=1&from=${openUnix}&to=${nowUnix}&token=${apiKey}`);
-      const d = await r.json();
-      if(d && d.s === 'ok' && d.t && d.c) {
-        candleMap[sym] = d.t.map((t, i) => ({t, c: d.c[i]}));
-      }
-    } catch(e) { console.error('candle', sym, e); }
-  }));
-
-  if(!Object.keys(candleMap).length) return;
-
-  // Build unified sorted timeline of minute timestamps
-  const allTimes = [...new Set(
-    Object.values(candleMap).flatMap(arr => arr.map(x => x.t))
-  )].sort((a,b) => a-b);
-
-  // For each symbol, build a map of t -> close price for quick lookup
-  const closeMaps = {};
-  stockSyms.forEach(sym => {
-    closeMaps[sym] = {};
-    (candleMap[sym] || []).forEach(({t, c}) => { closeMaps[sym][t] = c; });
-  });
-
-  // Also need prev close per symbol (from quotes[sym].pc)
-  // We'll reconstruct per-minute P&L: sum over positions of (price_at_t - prevClose) * shares
-  // For minutes without a candle for a symbol, carry forward the last known price
-  portHistory.length = 0; // clear any existing points
-
-  const lastKnown = {}; // sym -> last seen close
-  stockSyms.forEach(sym => { lastKnown[sym] = quotes[sym]?.pc || null; });
-
-  allTimes.forEach(t => {
-    let dayGL = 0;
-    let hasAny = false;
-    stockSyms.forEach(sym => {
-      const pos = portfolio[sym];
-      const pc = quotes[sym]?.pc;
-      if(pc == null) return;
-      if(closeMaps[sym][t] != null) lastKnown[sym] = closeMaps[sym][t];
-      const price = lastKnown[sym];
-      if(price == null) return;
-      dayGL += (price - pc) * pos.shares;
-      hasAny = true;
-    });
-    if(hasAny) {
-      const date = new Date(t * 1000);
-      pushPortfolioPoint(dayGL, date, true);
-    }
-  });
-
-  document.getElementById('port-chart-sub').textContent =
-    `From market open · ${allTimes.length} min loaded`;
-}
+// ── Intraday history removed (used Finnhub candles, no longer needed) ──────
 
 function renderPortChart() {
   const wrap = document.getElementById('port-chart-wrap');
@@ -1060,7 +973,7 @@ function renderChips(){
   const wrap=document.getElementById('watchlist-chips'); wrap.innerHTML='';
   watchlist.forEach(sym=>{ const btn=document.createElement('button'); btn.className='chip'+(activeMarketSym===sym?' active':''); btn.textContent=sym; btn.onclick=()=>selectSym(sym); wrap.appendChild(btn); });
 }
-function selectSym(sym){ activeMarketSym=sym; renderMarket(); renderChips(); updateDetail(sym); if(apiKey) fetchQuote(sym); }
+function selectSym(sym){ activeMarketSym=sym; renderMarket(); renderChips(); updateDetail(sym); fetchQuote(sym); }
 
 function updateDetail(sym){
   if(!sym){document.getElementById('detail-panel').style.display='none';return;}
@@ -1168,33 +1081,45 @@ document.getElementById('pos-sym').addEventListener('keydown',e=>{if(e.key==='En
 document.getElementById('pos-shares').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('pos-cost').focus();});
 document.getElementById('pos-cost').addEventListener('keydown',e=>{if(e.key==='Enter')addPosition();});
 
-// ── Data fetching (Yahoo Finance via corsproxy.io) ─────────────────────────
-const PROXY = 'https://corsproxy.io/?url=';
-const YF    = sym => `${PROXY}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1m&range=1d`)}`;
+// ── Data fetching (Yahoo Finance) ──────────────────────────────────────────
+const PROXIES = [
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
+async function fetchWithProxy(url) {
+  for(const proxy of PROXIES) {
+    try {
+      const r = await fetch(proxy(url), { signal: AbortSignal.timeout(8000) });
+      if(!r.ok) continue;
+      const text = await r.text();
+      return JSON.parse(text);
+    } catch(e) { continue; }
+  }
+  throw new Error('All proxies failed for: ' + url);
+}
 
 async function fetchQuote(sym) {
   if(sym === 'CASH') return;
   try {
-    const r = await fetch(YF(sym));
-    const d = await r.json();
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1m&range=1d`;
+    const d = await fetchWithProxy(url);
     const meta = d?.chart?.result?.[0]?.meta;
     if(!meta) return;
 
-    // Current price: prefer post/pre-market price, fall back to regular
     const price = meta.postMarketPrice || meta.preMarketPrice || meta.regularMarketPrice;
     const pc    = meta.chartPreviousClose || meta.previousClose;
-
     if(!price) return;
 
     if(!quotes[sym]) quotes[sym] = {};
-    quotes[sym].c  = price;
+    quotes[sym].c = price;
     quotes[sym].pc = pc;
-    quotes[sym].o  = meta.regularMarketOpen ?? price;
-    quotes[sym].h  = meta.regularMarketDayHigh ?? price;
-    quotes[sym].l  = meta.regularMarketDayLow  ?? price;
-    quotes[sym].v  = meta.regularMarketVolume   ?? 0;
+    quotes[sym].o = meta.regularMarketOpen ?? price;
+    quotes[sym].h = meta.regularMarketDayHigh ?? price;
+    quotes[sym].l = meta.regularMarketDayLow  ?? price;
+    quotes[sym].v = meta.regularMarketVolume   ?? 0;
 
-    // Store reliable prev close
     if(pc) prevClose[sym] = pc;
 
     if(!priceHistory[sym]) priceHistory[sym] = [];
@@ -1204,7 +1129,7 @@ async function fetchQuote(sym) {
     renderPortfolio(); renderMarket();
     if(activeMarketSym === sym) updateDetail(sym);
     if(document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
-  } catch(e) { console.error('fetchQuote', sym, e); }
+  } catch(e) { console.error('fetchQuote failed', sym, e); }
 }
 
 async function fetchAll() {
