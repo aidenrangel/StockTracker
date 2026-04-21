@@ -444,7 +444,7 @@ let activeMarketSym = null, miniChart = null, donutChart = null, editingSym = nu
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
 let watchlist  = JSON.parse(localStorage.getItem('mkt_watchlist')  || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
-let quotes = {}, priceHistory = {}, athData = {}, prevClose = {}, todayClose = {};
+let quotes = {}, priceHistory = {}, athData = {}, prevClose = {};
 let sortCol = 'sym', sortDir = 1;
 
 const NAMES = {
@@ -544,7 +544,7 @@ function renderPortfolio() {
     const cost=isCash?pos.shares:pos.avgCost*pos.shares;
     const gl=isCash?0:(mktVal!=null?mktVal-cost:null);
     const glPct=isCash?0:(gl!=null&&cost>0?(gl/cost)*100:null);
-    const pc = getDayBaseline(sym); // prev close during hours, today's close after hours
+    const pc = prevClose[sym] ?? q?.pc ?? null;
     const dayGL=isCash?null:(q&&pc!=null?(q.c-pc)*pos.shares:null);
     const dayPct=isCash?null:(q&&pc!=null?((q.c-pc)/pc)*100:null);
     const ath=isCash?null:(athData[sym]||null);
@@ -624,9 +624,6 @@ function setSummary(val,cost,gl,glPct,dayGL,dayPct){
   const dEl=document.getElementById('sum-day'),dPEl=document.getElementById('sum-day-pct');
   dEl.textContent=dayGL!=null?fs$(dayGL):'—'; dEl.className='sc-val '+(dayGL!=null?dir(dayGL):'flat');
   dPEl.textContent=dayPct!=null?fp(dayPct):'—'; dPEl.className='sc-sub '+(dayPct!=null?dir(dayPct):'flat');
-  // Update label to reflect after-hours mode
-  const dayLabel = document.getElementById('day-label');
-  if(dayLabel) dayLabel.textContent = isAfterHours() ? 'After Hours' : 'Day Change';
   // Push day change to live chart
   if(dayGL!=null) pushPortfolioPoint(dayGL);
 }
@@ -865,7 +862,7 @@ function renderBreakdown() {
     const cost=pos.avgCost*pos.shares;
     const gl=mktVal-cost;
     const glPct=(gl/cost)*100;
-    const dayPct=q?(()=>{ const pc=getDayBaseline(sym); return pc?((q.c-pc)/pc)*100:null; })():null;
+    const dayPct=q?(()=>{ const pc=prevClose[sym]??q.pc; return pc?((q.c-pc)/pc)*100:null; })():null;
     totalVal+=mktVal;
     return { sym, mktVal, cost, gl, glPct, dayPct, sector: SECTORS[sym]||'Other' };
   });
@@ -1052,7 +1049,7 @@ function renderMarket() {
   const grid = document.getElementById('market-grid');
   grid.innerHTML='';
   watchlist.forEach(sym=>{
-    const q=quotes[sym], pct=q?(()=>{ const pc=getDayBaseline(sym); return pc?((q.c-pc)/pc)*100:null; })():null, d=dir(pct);
+    const q=quotes[sym], pct=q?(()=>{ const pc=prevClose[sym]??q.pc; return pc?((q.c-pc)/pc)*100:null; })():null, d=dir(pct);
     const card=document.createElement('div');
     card.className='mcard'+(activeMarketSym===sym?' active':'');
     card.innerHTML=`<div class="mc-sym">${sym}</div><div class="mc-price ${d}">${q?f$(q.c):'—'}</div><div class="mc-change ${d}">${pct!=null?arr(d)+' '+fp(pct):'—'}</div><div class="mc-name">${NAMES[sym]||sym}</div>`;
@@ -1073,7 +1070,7 @@ function updateDetail(sym){
   document.getElementById('dp-sym').textContent=sym;
   document.getElementById('dp-name').textContent=NAMES[sym]||sym;
   document.getElementById('dp-price').textContent=q?f$(q.c):'—';
-  const pct=q?(()=>{ const pc=getDayBaseline(sym); return pc?((q.c-pc)/pc)*100:null; })():null, d=dir(pct);
+  const pct=q?(()=>{ const pc=prevClose[sym]??q.pc; return pc?((q.c-pc)/pc)*100:null; })():null, d=dir(pct);
   const dpC=document.getElementById('dp-change'); dpC.textContent=pct!=null?`${arr(d)} ${fp(pct)} today`:'—'; dpC.className='sc-sub '+d;
   document.getElementById('dp-open').textContent=q?f$(q.o):'—';
   document.getElementById('dp-high').textContent=q?f$(q.h):'—';
@@ -1207,30 +1204,9 @@ async function fetchATH(sym){
   }catch(e){console.error('fetchATH',sym,e);}
 }
 
-// Returns true if current ET time is outside regular market hours (9:30–16:00)
-function isAfterHours() {
-  const now = new Date();
-  // Get current time in ET
-  const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
-  const et = new Date(etStr);
-  const h = et.getHours(), m = et.getMinutes();
-  const mins = h * 60 + m;
-  return mins < 9 * 60 + 30 || mins >= 16 * 60; // before 9:30 or at/after 16:00
-}
-
-// Returns the right baseline for day change:
-// - During market hours: previous day's close
-// - After hours / pre-market: today's 4 PM close (if available), else prev close
-function getDayBaseline(sym) {
-  if(isAfterHours() && todayClose[sym] != null) return todayClose[sym];
-  return prevClose[sym] ?? null;
-}
-
 async function fetchPrevClose(sym) {
   if(!apiKey || sym === 'CASH') return;
-  // Always re-fetch during after-hours so todayClose stays fresh
-  const needsTodayClose = isAfterHours() && todayClose[sym] == null;
-  if(prevClose[sym] != null && !needsTodayClose) return;
+  if(prevClose[sym] != null) return;
   try {
     const now = new Date();
     const to = Math.floor(now.getTime() / 1000);
@@ -1239,19 +1215,11 @@ async function fetchPrevClose(sym) {
     const d = await r.json();
     if(d && d.s === 'ok' && d.t && d.c && d.c.length >= 1) {
       const todayMidnightUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-      let pc = null, tc = null;
+      let pc = null;
       for(let i = d.t.length - 1; i >= 0; i--) {
-        const candleMs = d.t[i] * 1000;
-        if(candleMs >= todayMidnightUTC && tc == null) {
-          tc = d.c[i]; // today's session close
-        } else if(candleMs < todayMidnightUTC && pc == null) {
-          pc = d.c[i]; // previous trading day close
-          break;
-        }
+        if(d.t[i] * 1000 < todayMidnightUTC) { pc = d.c[i]; break; }
       }
-      if(pc != null) prevClose[sym] = pc;
-      if(tc != null) todayClose[sym] = tc;
-      renderPortfolio();
+      if(pc != null) { prevClose[sym] = pc; renderPortfolio(); }
     }
   } catch(e) { console.error('fetchPrevClose', sym, e); }
 }
