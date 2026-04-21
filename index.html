@@ -237,6 +237,7 @@
     <span class="badge" id="status-badge">disconnected</span>
   </div>
   <div class="topbar-right">
+    <input type="text" class="key-input" id="api-key" placeholder="Finnhub API key…" />
     <button class="btn primary" onclick="connect()">Connect</button>
     <button class="btn danger" onclick="disconnect()">Disconnect</button>
   </div>
@@ -434,11 +435,11 @@
   </div>
 </div>
 
-<footer>Powered by <a href="https://finance.yahoo.com" target="_blank">Yahoo Finance</a> via corsproxy.io &mdash; refreshes every 15s.</footer>
+<footer>Powered by <a href="https://finnhub.io" target="_blank">Finnhub</a> &mdash; prices may be delayed up to 15s on free tier.</footer>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-let refreshInterval = null;
+let apiKey = '', ws = null, refreshInterval = null;
 let activeMarketSym = null, miniChart = null, donutChart = null, editingSym = null;
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
@@ -973,7 +974,7 @@ function renderChips(){
   const wrap=document.getElementById('watchlist-chips'); wrap.innerHTML='';
   watchlist.forEach(sym=>{ const btn=document.createElement('button'); btn.className='chip'+(activeMarketSym===sym?' active':''); btn.textContent=sym; btn.onclick=()=>selectSym(sym); wrap.appendChild(btn); });
 }
-function selectSym(sym){ activeMarketSym=sym; renderMarket(); renderChips(); updateDetail(sym); fetchQuote(sym); }
+function selectSym(sym){ activeMarketSym=sym; renderMarket(); renderChips(); updateDetail(sym); if(apiKey) fetchQuote(sym); }
 
 function updateDetail(sym){
   if(!sym){document.getElementById('detail-panel').style.display='none';return;}
@@ -1033,7 +1034,7 @@ function addPosition(){
   document.getElementById('pos-cost').value='';
   setMsg('pos-msg',`Added ${sym} — ${shares} shares @ ${f$(cost)}`,'ok');
   renderPortfolio(); renderMarket(); renderChips();
-  fetchQuote(sym);
+  if(apiKey){ fetchQuote(sym); fetchPrevClose(sym); if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'subscribe',symbol:sym})); }
 }
 function openEdit(sym){
   editingSym=sym;
@@ -1073,7 +1074,7 @@ function addWatchSymbol(){
   document.getElementById('watch-sym').value='';
   setMsg('watch-msg','Added '+sym,'ok');
   renderMarket(); renderChips();
-  fetchQuote(sym);
+  if(apiKey){ fetchQuote(sym); if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'subscribe',symbol:sym})); }
 }
 
 document.getElementById('watch-sym').addEventListener('keydown',e=>{if(e.key==='Enter')addWatchSymbol();});
@@ -1081,77 +1082,101 @@ document.getElementById('pos-sym').addEventListener('keydown',e=>{if(e.key==='En
 document.getElementById('pos-shares').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('pos-cost').focus();});
 document.getElementById('pos-cost').addEventListener('keydown',e=>{if(e.key==='Enter')addPosition();});
 
-// ── Data fetching (Yahoo Finance) ──────────────────────────────────────────
-const PROXIES = [
-  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://thingproxy.freeboard.io/fetch/${url}`,
-];
-
-async function fetchWithProxy(url) {
-  for(const proxy of PROXIES) {
-    try {
-      const r = await fetch(proxy(url), { signal: AbortSignal.timeout(8000) });
-      if(!r.ok) continue;
-      const text = await r.text();
-      return JSON.parse(text);
-    } catch(e) { continue; }
-  }
-  throw new Error('All proxies failed for: ' + url);
-}
-
+// ── Data fetching (Finnhub) ────────────────────────────────────────────────
 async function fetchQuote(sym) {
-  if(sym === 'CASH') return;
+  if(!apiKey || sym === 'CASH') return;
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1m&range=1d`;
-    const d = await fetchWithProxy(url);
-    const meta = d?.chart?.result?.[0]?.meta;
-    if(!meta) return;
-
-    const price = meta.postMarketPrice || meta.preMarketPrice || meta.regularMarketPrice;
-    const pc    = meta.chartPreviousClose || meta.previousClose;
-    if(!price) return;
-
-    if(!quotes[sym]) quotes[sym] = {};
-    quotes[sym].c = price;
-    quotes[sym].pc = pc;
-    quotes[sym].o = meta.regularMarketOpen ?? price;
-    quotes[sym].h = meta.regularMarketDayHigh ?? price;
-    quotes[sym].l = meta.regularMarketDayLow  ?? price;
-    quotes[sym].v = meta.regularMarketVolume   ?? 0;
-
-    if(pc) prevClose[sym] = pc;
-
-    if(!priceHistory[sym]) priceHistory[sym] = [];
-    priceHistory[sym].push(price);
-    if(priceHistory[sym].length > 80) priceHistory[sym].shift();
-
-    renderPortfolio(); renderMarket();
-    if(activeMarketSym === sym) updateDetail(sym);
-    if(document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
-  } catch(e) { console.error('fetchQuote failed', sym, e); }
+    const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`);
+    const d = await r.json();
+    if(d && d.c) {
+      quotes[sym] = d;
+      if(!priceHistory[sym]) priceHistory[sym] = [];
+      priceHistory[sym].push(d.c);
+      if(priceHistory[sym].length > 80) priceHistory[sym].shift();
+      renderPortfolio(); renderMarket();
+      if(activeMarketSym === sym) updateDetail(sym);
+      if(document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
+    }
+  } catch(e) { console.error('fetchQuote', sym, e); }
 }
 
-async function fetchAll() {
-  await Promise.all(allSyms().filter(s => s !== 'CASH').map(s => fetchQuote(s)));
+async function fetchAll() { for(const s of allSyms()) await fetchQuote(s); }
+
+async function fetchPrevClose(sym) {
+  if(!apiKey || sym === 'CASH') return;
+  if(prevClose[sym] != null) return;
+  try {
+    const now = new Date();
+    const to = Math.floor(now.getTime() / 1000);
+    const from = to - 5 * 24 * 3600;
+    const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=D&from=${from}&to=${to}&token=${apiKey}`);
+    const d = await r.json();
+    if(d && d.s === 'ok' && d.t && d.c && d.c.length >= 1) {
+      const todayMidnightUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      let pc = null;
+      for(let i = d.t.length - 1; i >= 0; i--) {
+        if(d.t[i] * 1000 < todayMidnightUTC) { pc = d.c[i]; break; }
+      }
+      if(pc != null) { prevClose[sym] = pc; renderPortfolio(); }
+    }
+  } catch(e) { console.error('fetchPrevClose', sym, e); }
+}
+
+async function fetchAllPrevClose() {
+  const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
+  for(const s of stockSyms) await fetchPrevClose(s);
 }
 
 function connect() {
+  apiKey = document.getElementById('api-key').value.trim();
+  if(!apiKey) { alert('Paste your Finnhub API key.'); return; }
+  localStorage.setItem('finnhub_key', apiKey);
   setBadge('poll');
   fetchAll().then(() => {
-    setBadge('live');
+    setBadge('poll');
     if(!refreshInterval) refreshInterval = setInterval(fetchAll, 15000);
+    fetchAllPrevClose();
   });
+  if(ws) { ws.close(); ws = null; }
+  try {
+    ws = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
+    ws.onopen = () => {
+      allSyms().forEach(s => ws.send(JSON.stringify({ type: 'subscribe', symbol: s })));
+      setBadge('live');
+      if(refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+    };
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if(data.type === 'trade' && data.data) {
+        data.data.forEach(t => {
+          const s = t.s;
+          if(!quotes[s]) quotes[s] = { c: t.p, pc: t.p, o: t.p, h: t.p, l: t.p };
+          else quotes[s].c = t.p;
+          if(!priceHistory[s]) priceHistory[s] = [];
+          priceHistory[s].push(t.p);
+          if(priceHistory[s].length > 80) priceHistory[s].shift();
+        });
+        renderPortfolio(); renderMarket();
+        if(activeMarketSym && data.data.find(t => t.s === activeMarketSym)) updateDetail(activeMarketSym);
+        if(document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
+      }
+    };
+    ws.onerror = () => { setBadge('poll'); if(!refreshInterval) refreshInterval = setInterval(fetchAll, 15000); };
+    ws.onclose = () => { if(!refreshInterval) refreshInterval = setInterval(fetchAll, 15000); };
+  } catch(e) { setBadge('poll'); if(!refreshInterval) refreshInterval = setInterval(fetchAll, 15000); }
 }
 
 function disconnect() {
+  if(ws) { ws.close(); ws = null; }
   if(refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
   setBadge('disconnected');
+  localStorage.removeItem('finnhub_key');
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
 renderPortfolio(); renderMarket(); renderChips();
-connect();
+const savedKey = localStorage.getItem('finnhub_key');
+if(savedKey) { document.getElementById('api-key').value = savedKey; apiKey = savedKey; connect(); }
 </script>
 </body>
 </html>
