@@ -630,16 +630,105 @@ function setSummary(val,cost,gl,glPct,dayGL,dayPct){
 // ── Live portfolio chart ───────────────────────────────────────────────────
 let portChart = null;
 const portHistory = []; // [{t: Date, v: number}]
-const PORT_MAX_POINTS = 300;
+const PORT_MAX_POINTS = 400; // full trading day = 390 min
 
-function pushPortfolioPoint(val) {
-  const now = new Date();
-  // Throttle: only push if value changed or >5s since last point
+function pushPortfolioPoint(val, t=null, seeding=false) {
+  const now = t || new Date();
   const last = portHistory[portHistory.length-1];
-  if(last && Math.abs(last.v - val) < 0.01 && (now - last.t) < 5000) return;
+  // During live updates, throttle duplicates; during seeding always accept
+  if(!seeding && last && Math.abs(last.v - val) < 0.01 && (now - last.t) < 5000) return;
   portHistory.push({t: now, v: val});
   if(portHistory.length > PORT_MAX_POINTS) portHistory.shift();
   renderPortChart();
+}
+
+// ── Intraday history loader ────────────────────────────────────────────────
+// Fetches 1-min candles from market open for each stock, reconstructs portfolio P&L per minute
+async function loadIntradayHistory() {
+  const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
+  if(!stockSyms.length) return;
+
+  // Market open: 9:30 AM ET in unix seconds
+  const now = new Date();
+  const etOffset = -5 * 3600; // ET is UTC-5 (approximate; good enough for market hours)
+  const etNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60 + etOffset) * -1000 * 0);
+  // Get today's market open timestamp in unix (9:30 AM ET)
+  const todayET = new Date(now.toLocaleDateString('en-US', {timeZone:'America/New_York'}));
+  const marketOpen = new Date(todayET);
+  marketOpen.setHours(9, 30, 0, 0);
+  // Convert to ET unix
+  const marketOpenET = Math.floor(marketOpen.getTime() / 1000) + (new Date().getTimezoneOffset() * 60) - (5 * 3600);
+  // Actually use a reliable approach: just use timestamps
+  const nowUnix = Math.floor(Date.now() / 1000);
+  // 9:30 AM ET = 14:30 UTC (EST) or 13:30 UTC (EDT)
+  // Detect DST: in summer ET = UTC-4, winter ET = UTC-5
+  const jan = new Date(now.getFullYear(), 0, 1).getTimezoneOffset();
+  const jul = new Date(now.getFullYear(), 6, 1).getTimezoneOffset();
+  const isDST = Math.min(jan, jul) !== jan;
+  const etUtcOffset = isDST ? 4 : 5; // hours behind UTC
+  const todayUtcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const openUnix = Math.floor(todayUtcMidnight.getTime() / 1000) + (9 * 3600 + 30 * 60) + etUtcOffset * 3600;
+
+  if(nowUnix < openUnix) {
+    // Market hasn't opened yet today — nothing to load
+    return;
+  }
+
+  // Fetch candles for each stock position
+  const candleMap = {}; // sym -> [{t, c}]
+  await Promise.all(stockSyms.map(async sym => {
+    try {
+      const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=1&from=${openUnix}&to=${nowUnix}&token=${apiKey}`);
+      const d = await r.json();
+      if(d && d.s === 'ok' && d.t && d.c) {
+        candleMap[sym] = d.t.map((t, i) => ({t, c: d.c[i]}));
+      }
+    } catch(e) { console.error('candle', sym, e); }
+  }));
+
+  if(!Object.keys(candleMap).length) return;
+
+  // Build unified sorted timeline of minute timestamps
+  const allTimes = [...new Set(
+    Object.values(candleMap).flatMap(arr => arr.map(x => x.t))
+  )].sort((a,b) => a-b);
+
+  // For each symbol, build a map of t -> close price for quick lookup
+  const closeMaps = {};
+  stockSyms.forEach(sym => {
+    closeMaps[sym] = {};
+    (candleMap[sym] || []).forEach(({t, c}) => { closeMaps[sym][t] = c; });
+  });
+
+  // Also need prev close per symbol (from quotes[sym].pc)
+  // We'll reconstruct per-minute P&L: sum over positions of (price_at_t - prevClose) * shares
+  // For minutes without a candle for a symbol, carry forward the last known price
+  portHistory.length = 0; // clear any existing points
+
+  const lastKnown = {}; // sym -> last seen close
+  stockSyms.forEach(sym => { lastKnown[sym] = quotes[sym]?.pc || null; });
+
+  allTimes.forEach(t => {
+    let dayGL = 0;
+    let hasAny = false;
+    stockSyms.forEach(sym => {
+      const pos = portfolio[sym];
+      const pc = quotes[sym]?.pc;
+      if(pc == null) return;
+      if(closeMaps[sym][t] != null) lastKnown[sym] = closeMaps[sym][t];
+      const price = lastKnown[sym];
+      if(price == null) return;
+      dayGL += (price - pc) * pos.shares;
+      hasAny = true;
+    });
+    if(hasAny) {
+      const date = new Date(t * 1000);
+      pushPortfolioPoint(dayGL, date, true);
+    }
+  });
+
+  document.getElementById('port-chart-sub').textContent =
+    `From market open · ${allTimes.length} min`;
 }
 
 function renderPortChart() {
@@ -1124,7 +1213,12 @@ function connect(){
   if(!apiKey){alert('Paste your Finnhub API key.');return;}
   localStorage.setItem('finnhub_key',apiKey);
   setBadge('poll');
-  fetchAll().then(()=>{setBadge('poll');if(!refreshInterval)refreshInterval=setInterval(fetchAll,15000);fetchAllATH();});
+  fetchAll().then(()=>{
+    setBadge('poll');
+    if(!refreshInterval) refreshInterval=setInterval(fetchAll,15000);
+    fetchAllATH();
+    loadIntradayHistory();
+  });
   if(ws){ws.close();ws=null;}
   try{
     ws=new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
