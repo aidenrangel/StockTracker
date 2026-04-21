@@ -81,10 +81,15 @@
     .sc-sub { font-size: 12px; font-weight: 500; margin-top: 4px; }
 
     /* ── Holdings table ── */
-    .table-wrap { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--r-xl); overflow: hidden; margin-bottom: 1.5rem; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    thead th { font-size: 10px; font-weight: 600; color: var(--text3); text-align: right; padding: 10px 16px; border-bottom: 0.5px solid var(--border); background: var(--surface2); letter-spacing: .3px; white-space: nowrap; }
+    .table-wrap { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--r-xl); overflow-x: auto; margin-bottom: 1.5rem; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; min-width: 780px; border-collapse: collapse; font-size: 13px; }
+    thead th { font-size: 10px; font-weight: 600; color: var(--text3); text-align: right; padding: 10px 16px; border-bottom: 0.5px solid var(--border); background: var(--surface2); letter-spacing: .3px; white-space: nowrap; cursor: pointer; user-select: none; transition: color .12s; }
     thead th:first-child { text-align: left; }
+    thead th:last-child { cursor: default; }
+    thead th:hover:not(:last-child) { color: var(--text); }
+    thead th.sort-asc::after { content: ' ↑'; opacity: .8; }
+    thead th.sort-desc::after { content: ' ↓'; opacity: .8; }
+    thead th.sort-asc, thead th.sort-desc { color: var(--text); }
     tbody tr { border-bottom: 0.5px solid var(--border); transition: background .1s; }
     tbody tr:last-child { border-bottom: none; }
     tbody tr:hover { background: var(--surface2); }
@@ -254,9 +259,17 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr>
-            <th>Symbol</th><th>Price</th><th>Day</th><th>Shares</th>
-            <th>Avg Cost</th><th>Mkt Value</th><th>Gain / Loss</th><th>Return</th><th title="% below 52-week high (best available on free API tier)">vs 52W High</th><th></th>
+          <tr id="port-thead">
+            <th onclick="sortBy('sym')">Symbol</th>
+            <th onclick="sortBy('price')">Price</th>
+            <th onclick="sortBy('day')">Day</th>
+            <th onclick="sortBy('shares')">Shares</th>
+            <th onclick="sortBy('avgCost')">Avg Cost</th>
+            <th onclick="sortBy('mktVal')">Mkt Value</th>
+            <th onclick="sortBy('gl')">Gain / Loss</th>
+            <th onclick="sortBy('glPct')">Return</th>
+            <th onclick="sortBy('athPct')" title="% below 52-week high (best available on free API tier)">vs 52W High</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="port-tbody"></tbody>
@@ -405,6 +418,7 @@ let activeMarketSym = null, miniChart = null, donutChart = null, editingSym = nu
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
 let watchlist  = JSON.parse(localStorage.getItem('mkt_watchlist')  || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
 let quotes = {}, priceHistory = {}, athData = {};
+let sortCol = 'sym', sortDir = 1; // sortDir: 1=asc, -1=desc
 
 const NAMES = {
   AAPL:'Apple', MSFT:'Microsoft', GOOGL:'Alphabet', NVDA:'NVIDIA', TSLA:'Tesla',
@@ -468,52 +482,93 @@ function showTab(tab) {
   if(tab==='breakdown') renderBreakdown();
 }
 
+function sortBy(col){
+  if(sortCol===col) sortDir*=-1;
+  else { sortCol=col; sortDir=col==='sym'?1:-1; } // default: alpha asc, numeric desc
+  renderPortfolio();
+}
+
+function updateSortHeaders(){
+  const ths=document.querySelectorAll('#port-thead th');
+  const colMap=['sym','price','day','shares','avgCost','mktVal','gl','glPct','athPct'];
+  ths.forEach((th,i)=>{
+    th.classList.remove('sort-asc','sort-desc');
+    if(colMap[i]===sortCol) th.classList.add(sortDir===1?'sort-asc':'sort-desc');
+  });
+}
+
 function renderPortfolio() {
   const tbody = document.getElementById('port-tbody');
   tbody.innerHTML = '';
   const syms = Object.keys(portfolio);
   if(!syms.length){
-    tbody.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px;">No positions yet — add one below.</td></tr>`;
-    setSummary(null,null,null,null,null,null); return;
+    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px;">No positions yet — add one below.</td></tr>`;
+    setSummary(null,null,null,null,null,null); updateSortHeaders(); return;
   }
+
+  // Build row data
   let totalVal=0,totalCost=0,totalDayGL=0,hasPrices=false;
-  syms.forEach(sym=>{
+  const rows = syms.map(sym=>{
     const pos=portfolio[sym];
-    const isCash = sym==='CASH';
+    const isCash=sym==='CASH';
     const q=isCash?null:quotes[sym];
-    // CASH: value = shares (treated as dollar amount), no price needed
-    const price = isCash ? 1 : (q?q.c:null);
-    const mktVal = isCash ? pos.shares : (price!=null?price*pos.shares:null);
-    const cost = isCash ? pos.shares : pos.avgCost*pos.shares;
-    const gl = isCash ? 0 : (mktVal!=null?mktVal-cost:null);
-    const glPct = isCash ? 0 : (gl!=null&&cost>0?(gl/cost)*100:null);
-    const dayGL = isCash ? null : (q?(q.c-q.pc)*pos.shares:null);
-    const dayPct = isCash ? null : (q?((q.c-q.pc)/q.pc)*100:null);
+    const price=isCash?1:(q?q.c:null);
+    const mktVal=isCash?pos.shares:(price!=null?price*pos.shares:null);
+    const cost=isCash?pos.shares:pos.avgCost*pos.shares;
+    const gl=isCash?0:(mktVal!=null?mktVal-cost:null);
+    const glPct=isCash?0:(gl!=null&&cost>0?(gl/cost)*100:null);
+    const dayGL=isCash?null:(q?(q.c-q.pc)*pos.shares:null);
+    const dayPct=isCash?null:(q?((q.c-q.pc)/q.pc)*100:null);
+    const ath=isCash?null:(athData[sym]||null);
+    const athPct=ath&&price!=null?((price-ath)/ath)*100:null;
     if(mktVal!=null){totalVal+=mktVal;if(!isCash)hasPrices=true;}
     totalCost+=cost;
-    if(dayGL!=null) totalDayGL+=dayGL;
-    const glD=dir(gl), dayD=dir(dayGL);
+    if(dayGL!=null)totalDayGL+=dayGL;
+    return {sym,pos,isCash,price,mktVal,cost,gl,glPct,dayGL,dayPct,ath,athPct};
+  });
+
+  // Sort — CASH always pinned to bottom
+  const cashRows=rows.filter(r=>r.isCash);
+  let stockRows=rows.filter(r=>!r.isCash);
+  const getSortVal=r=>{
+    switch(sortCol){
+      case 'sym':    return r.sym;
+      case 'price':  return r.price??-Infinity;
+      case 'day':    return r.dayPct??-Infinity;
+      case 'shares': return r.pos.shares;
+      case 'avgCost':return r.pos.avgCost;
+      case 'mktVal': return r.mktVal??-Infinity;
+      case 'gl':     return r.gl??-Infinity;
+      case 'glPct':  return r.glPct??-Infinity;
+      case 'athPct': return r.athPct??-Infinity;
+      default:       return 0;
+    }
+  };
+  stockRows.sort((a,b)=>{
+    const va=getSortVal(a), vb=getSortVal(b);
+    if(typeof va==='string') return va.localeCompare(vb)*sortDir;
+    return (va-vb)*sortDir;
+  });
+  const sorted=[...stockRows,...cashRows];
+
+  // Render rows
+  sorted.forEach(({sym,pos,isCash,price,mktVal,gl,glPct,dayGL,dayPct,ath,athPct})=>{
+    const glD=dir(gl), dayD=dir(dayGL), athD=dir(athPct);
     const tr=document.createElement('tr');
     if(isCash){
       tr.innerHTML=`
         <td><div class="td-sym" style="color:var(--text2)">CASH</div><div class="td-name">Cash balance</div></td>
-        <td class="td-mono" style="color:var(--text3)">—</td>
-        <td><span style="color:var(--text3)">—</span></td>
-        <td class="td-mono" style="color:var(--text3)">—</td>
-        <td class="td-mono" style="color:var(--text3)">—</td>
+        <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
+        <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
         <td class="td-mono">${f$(pos.shares)}</td>
-        <td class="td-mono" style="color:var(--text3)">—</td>
-        <td><span style="color:var(--text3)">—</span></td>
+        <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
         <td style="color:var(--text3)">—</td>
         <td><button class="btn sm" onclick="openEdit('${sym}')">Edit</button></td>
       `;
     } else {
-      const ath=athData[sym]||null;
-      const athPct=ath&&price!=null?((price-ath)/ath)*100:null;
-      const athD=dir(athPct);
       const athCell=ath==null
-        ?'<span style="color:var(--text3);font-size:11px">loading…</span>'
-        :athPct!=null?`<span class="pill ${athD}" title="52-week high: ${f$(ath)}">${arr(athD)} ${fp(athPct)}</span>`:'—';
+        ?'<span style="color:var(--text3);font-size:11px">…</span>'
+        :`<span class="pill ${athD}" title="52-week high: ${f$(ath)}">${arr(athD)} ${fp(athPct)}</span>`;
       tr.innerHTML=`
         <td><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym]||''}</div></td>
         <td class="td-mono">${price!=null?f$(price):'—'}</td>
@@ -529,10 +584,12 @@ function renderPortfolio() {
     }
     tbody.appendChild(tr);
   });
+
   const totalGL=hasPrices?totalVal-totalCost:null;
   const totalGLPct=(totalGL!=null&&totalCost>0)?(totalGL/totalCost)*100:null;
   const totalDayPct=totalVal>0&&(totalVal-totalDayGL)>0?(totalDayGL/(totalVal-totalDayGL))*100:null;
   setSummary(totalVal>0?totalVal:null,totalCost,totalGL,totalGLPct,hasPrices?totalDayGL:null,hasPrices?totalDayPct:null);
+  updateSortHeaders();
 }
 
 function setSummary(val,cost,gl,glPct,dayGL,dayPct){
