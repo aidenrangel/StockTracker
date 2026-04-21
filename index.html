@@ -237,7 +237,6 @@
     <span class="badge" id="status-badge">disconnected</span>
   </div>
   <div class="topbar-right">
-    <input type="text" class="key-input" id="api-key" placeholder="Finnhub API key…" />
     <button class="btn primary" onclick="connect()">Connect</button>
     <button class="btn danger" onclick="disconnect()">Disconnect</button>
   </div>
@@ -435,16 +434,16 @@
   </div>
 </div>
 
-<footer>Powered by <a href="https://finnhub.io" target="_blank">Finnhub</a> &mdash; prices may be delayed up to 15s on free tier.</footer>
+<footer>Powered by <a href="https://finance.yahoo.com" target="_blank">Yahoo Finance</a> via corsproxy.io &mdash; refreshes every 15s.</footer>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-let apiKey = '', ws = null, refreshInterval = null;
+let refreshInterval = null;
 let activeMarketSym = null, miniChart = null, donutChart = null, editingSym = null;
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
 let watchlist  = JSON.parse(localStorage.getItem('mkt_watchlist')  || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
-let quotes = {}, priceHistory = {}, athData = {}, prevClose = {};
+let quotes = {}, priceHistory = {}, prevClose = {};
 let sortCol = 'sym', sortDir = 1;
 
 const NAMES = {
@@ -1121,7 +1120,7 @@ function addPosition(){
   document.getElementById('pos-cost').value='';
   setMsg('pos-msg',`Added ${sym} — ${shares} shares @ ${f$(cost)}`,'ok');
   renderPortfolio(); renderMarket(); renderChips();
-  if(apiKey){ fetchQuote(sym); fetchATH(sym); fetchPrevClose(sym); if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'subscribe',symbol:sym})); }
+  fetchQuote(sym);
 }
 function openEdit(sym){
   editingSym=sym;
@@ -1161,7 +1160,7 @@ function addWatchSymbol(){
   document.getElementById('watch-sym').value='';
   setMsg('watch-msg','Added '+sym,'ok');
   renderMarket(); renderChips();
-  if(apiKey){ fetchQuote(sym); if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'subscribe',symbol:sym})); }
+  fetchQuote(sym);
 }
 
 document.getElementById('watch-sym').addEventListener('keydown',e=>{if(e.key==='Enter')addWatchSymbol();});
@@ -1169,146 +1168,65 @@ document.getElementById('pos-sym').addEventListener('keydown',e=>{if(e.key==='En
 document.getElementById('pos-shares').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('pos-cost').focus();});
 document.getElementById('pos-cost').addEventListener('keydown',e=>{if(e.key==='Enter')addPosition();});
 
-// ── Data fetching ──────────────────────────────────────────────────────────
+// ── Data fetching (Yahoo Finance via corsproxy.io) ─────────────────────────
+const PROXY = 'https://corsproxy.io/?url=';
+const YF    = sym => `${PROXY}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1m&range=1d`)}`;
 
-function isAfterHours() {
-  const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
-  const et = new Date(etStr);
-  const mins = et.getHours() * 60 + et.getMinutes();
-  return mins < 9 * 60 + 30 || mins >= 16 * 60;
-}
-
-// Fetch after-hours price from Yahoo Finance via corsproxy.io
-async function fetchYahooPrice(sym) {
+async function fetchQuote(sym) {
   if(sym === 'CASH') return;
   try {
-    const r = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1m&range=1d`)}`);
+    const r = await fetch(YF(sym));
     const d = await r.json();
     const meta = d?.chart?.result?.[0]?.meta;
     if(!meta) return;
-    // Use postMarketPrice if available, otherwise regularMarketPrice
-    const price = meta.postMarketPrice || meta.regularMarketPrice;
-    if(price && quotes[sym]) {
-      quotes[sym].c = price;
-      if(!priceHistory[sym]) priceHistory[sym] = [];
-      priceHistory[sym].push(price);
-      if(priceHistory[sym].length > 80) priceHistory[sym].shift();
-      renderPortfolio(); renderMarket();
-      if(activeMarketSym === sym) updateDetail(sym);
-      if(document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
-    }
-  } catch(e) { console.error('yahoo', sym, e); }
+
+    // Current price: prefer post/pre-market price, fall back to regular
+    const price = meta.postMarketPrice || meta.preMarketPrice || meta.regularMarketPrice;
+    const pc    = meta.chartPreviousClose || meta.previousClose;
+
+    if(!price) return;
+
+    if(!quotes[sym]) quotes[sym] = {};
+    quotes[sym].c  = price;
+    quotes[sym].pc = pc;
+    quotes[sym].o  = meta.regularMarketOpen ?? price;
+    quotes[sym].h  = meta.regularMarketDayHigh ?? price;
+    quotes[sym].l  = meta.regularMarketDayLow  ?? price;
+    quotes[sym].v  = meta.regularMarketVolume   ?? 0;
+
+    // Store reliable prev close
+    if(pc) prevClose[sym] = pc;
+
+    if(!priceHistory[sym]) priceHistory[sym] = [];
+    priceHistory[sym].push(price);
+    if(priceHistory[sym].length > 80) priceHistory[sym].shift();
+
+    renderPortfolio(); renderMarket();
+    if(activeMarketSym === sym) updateDetail(sym);
+    if(document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
+  } catch(e) { console.error('fetchQuote', sym, e); }
 }
 
-async function fetchAllYahoo() {
-  const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
-  await Promise.all(stockSyms.map(s => fetchYahooPrice(s)));
+async function fetchAll() {
+  await Promise.all(allSyms().filter(s => s !== 'CASH').map(s => fetchQuote(s)));
 }
 
-async function fetchQuote(sym){
-  if(!apiKey)return;
-  try{
-    const r=await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`);
-    const d=await r.json();
-    if(d&&d.c){
-      quotes[sym]=d;
-      if(!priceHistory[sym])priceHistory[sym]=[];
-      priceHistory[sym].push(d.c);
-      if(priceHistory[sym].length>80)priceHistory[sym].shift();
-      renderPortfolio(); renderMarket();
-      if(activeMarketSym===sym)updateDetail(sym);
-      if(document.getElementById('view-breakdown').style.display!=='none') renderBreakdown();
-    }
-  }catch(e){console.error(sym,e);}
-}
-
-async function fetchAll(){
-  for(const s of allSyms()) await fetchQuote(s);
-  // After market hours, layer in Yahoo Finance prices
-  if(isAfterHours()) await fetchAllYahoo();
-}
-
-async function fetchATH(sym){
-  if(!apiKey||sym==='CASH') return;
-  if(athData[sym]!=null) return; // already fetched
-  try{
-    const r=await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${sym}&metric=all&token=${apiKey}`);
-    const d=await r.json();
-    if(d&&d.metric){
-      // Best available on free tier: 52-week high
-      const high=d.metric['52WeekHigh']||null;
-      if(high) athData[sym]=high;
-      renderPortfolio();
-    }
-  }catch(e){console.error('fetchATH',sym,e);}
-}
-
-async function fetchPrevClose(sym) {
-  if(!apiKey || sym === 'CASH') return;
-  if(prevClose[sym] != null) return;
-  try {
-    const now = new Date();
-    const to = Math.floor(now.getTime() / 1000);
-    const from = to - 5 * 24 * 3600;
-    const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=D&from=${from}&to=${to}&token=${apiKey}`);
-    const d = await r.json();
-    if(d && d.s === 'ok' && d.t && d.c && d.c.length >= 1) {
-      const todayMidnightUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-      let pc = null;
-      for(let i = d.t.length - 1; i >= 0; i--) {
-        if(d.t[i] * 1000 < todayMidnightUTC) { pc = d.c[i]; break; }
-      }
-      if(pc != null) { prevClose[sym] = pc; renderPortfolio(); }
-    }
-  } catch(e) { console.error('fetchPrevClose', sym, e); }
-}
-
-async function fetchAllATH(){
-  const stockSyms=Object.keys(portfolio).filter(s=>s!=='CASH');
-  for(const s of stockSyms){
-    await fetchATH(s);
-    await fetchPrevClose(s);
-  }
-}
-
-function connect(){
-  apiKey=document.getElementById('api-key').value.trim();
-  if(!apiKey){alert('Paste your Finnhub API key.');return;}
-  localStorage.setItem('finnhub_key',apiKey);
+function connect() {
   setBadge('poll');
-  fetchAll().then(()=>{
-    setBadge('poll');
-    if(!refreshInterval) refreshInterval=setInterval(fetchAll,15000);
-    fetchAllATH();
+  fetchAll().then(() => {
+    setBadge('live');
+    if(!refreshInterval) refreshInterval = setInterval(fetchAll, 15000);
   });
-  if(ws){ws.close();ws=null;}
-  try{
-    ws=new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
-    ws.onopen=()=>{allSyms().forEach(s=>ws.send(JSON.stringify({type:'subscribe',symbol:s}))); setBadge('live'); if(refreshInterval){clearInterval(refreshInterval);refreshInterval=null;}};
-    ws.onmessage=(e)=>{
-      const data=JSON.parse(e.data);
-      if(data.type==='trade'&&data.data){
-        data.data.forEach(t=>{const s=t.s;if(!quotes[s])quotes[s]={c:t.p,pc:t.p,o:t.p,h:t.p,l:t.p};else quotes[s].c=t.p;if(!priceHistory[s])priceHistory[s]=[];priceHistory[s].push(t.p);if(priceHistory[s].length>80)priceHistory[s].shift();});
-        renderPortfolio(); renderMarket();
-        if(activeMarketSym&&data.data.find(t=>t.s===activeMarketSym))updateDetail(activeMarketSym);
-        if(document.getElementById('view-breakdown').style.display!=='none')renderBreakdown();
-      }
-    };
-    ws.onerror=()=>{setBadge('poll');if(!refreshInterval)refreshInterval=setInterval(fetchAll,15000);};
-    ws.onclose=()=>{if(!refreshInterval)refreshInterval=setInterval(fetchAll,15000);};
-  }catch(e){setBadge('poll');if(!refreshInterval)refreshInterval=setInterval(fetchAll,15000);}
 }
-function disconnect(){
-  if(ws){ws.close();ws=null;}
-  if(refreshInterval){clearInterval(refreshInterval);refreshInterval=null;}
+
+function disconnect() {
+  if(refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
   setBadge('disconnected');
-  localStorage.removeItem('finnhub_key');
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
 renderPortfolio(); renderMarket(); renderChips();
-const savedKey=localStorage.getItem('finnhub_key');
-if(savedKey){document.getElementById('api-key').value=savedKey;apiKey=savedKey;connect();}
+connect();
 </script>
 </body>
 </html>
