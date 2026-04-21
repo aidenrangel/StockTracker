@@ -80,6 +80,18 @@
     .sc-val { font-family: 'Space Mono', monospace; font-size: 17px; font-weight: 700; line-height: 1; }
     .sc-sub { font-size: 12px; font-weight: 500; margin-top: 4px; }
 
+    /* ── Portfolio live chart ── */
+    .port-chart-wrap {
+      background: var(--surface); border: 0.5px solid var(--border);
+      border-radius: var(--r-xl); padding: 18px 20px 14px; margin-bottom: 1.25rem;
+    }
+    .port-chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+    .port-chart-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+    .port-chart-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .port-chart-right { text-align: right; }
+    .port-chart-val { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; display: block; }
+    .port-chart-delta { font-size: 12px; font-weight: 600; margin-top: 2px; display: block; }
+
     /* ── Holdings table ── */
     .table-wrap { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--r-xl); overflow-x: auto; margin-bottom: 1.5rem; -webkit-overflow-scrolling: touch; }
     table { width: 100%; min-width: 780px; border-collapse: collapse; font-size: 13px; }
@@ -253,6 +265,23 @@
         <div class="sc-label">Day Change</div>
         <div class="sc-val" id="sum-day">—</div>
         <div class="sc-sub flat" id="sum-day-pct">—</div>
+      </div>
+    </div>
+
+    <!-- Live portfolio chart -->
+    <div class="port-chart-wrap" id="port-chart-wrap" style="display:none">
+      <div class="port-chart-header">
+        <div>
+          <div class="port-chart-title">Portfolio Value</div>
+          <div class="port-chart-sub" id="port-chart-sub">Live session</div>
+        </div>
+        <div class="port-chart-right">
+          <span class="port-chart-val" id="port-chart-val">—</span>
+          <span class="port-chart-delta" id="port-chart-delta"></span>
+        </div>
+      </div>
+      <div style="height:180px;position:relative">
+        <canvas id="port-chart"></canvas>
       </div>
     </div>
 
@@ -595,6 +624,128 @@ function setSummary(val,cost,gl,glPct,dayGL,dayPct){
   const dEl=document.getElementById('sum-day'),dPEl=document.getElementById('sum-day-pct');
   dEl.textContent=dayGL!=null?fs$(dayGL):'—'; dEl.className='sc-val '+(dayGL!=null?dir(dayGL):'flat');
   dPEl.textContent=dayPct!=null?fp(dayPct):'—'; dPEl.className='sc-sub '+(dayPct!=null?dir(dayPct):'flat');
+  // Push to live chart whenever we have a real value
+  if(val!=null) pushPortfolioPoint(val);
+}
+
+// ── Live portfolio chart ───────────────────────────────────────────────────
+let portChart = null;
+const portHistory = []; // [{t: Date, v: number}]
+const PORT_MAX_POINTS = 300;
+
+function pushPortfolioPoint(val) {
+  const now = new Date();
+  // Throttle: only push if value changed or >5s since last point
+  const last = portHistory[portHistory.length-1];
+  if(last && Math.abs(last.v - val) < 0.01 && (now - last.t) < 5000) return;
+  portHistory.push({t: now, v: val});
+  if(portHistory.length > PORT_MAX_POINTS) portHistory.shift();
+  renderPortChart();
+}
+
+function renderPortChart() {
+  const wrap = document.getElementById('port-chart-wrap');
+  if(portHistory.length < 2){ wrap.style.display='none'; return; }
+  wrap.style.display='';
+
+  const vals = portHistory.map(p=>p.v);
+  const first = vals[0], last = vals[vals.length-1];
+  const delta = last - first, deltaPct = (delta/first)*100;
+  const isUp = delta >= 0;
+  const color = isUp ? '#1a9470' : '#d94545';
+  const colorBg = isUp ? 'rgba(26,148,112,0.07)' : 'rgba(217,69,69,0.07)';
+
+  // Header stats
+  document.getElementById('port-chart-val').textContent = f$(last);
+  const deltaEl = document.getElementById('port-chart-delta');
+  deltaEl.textContent = `${isUp?'+':''}${fs$(delta).replace('$','')} (${fp(deltaPct)}) this session`;
+  deltaEl.style.color = isUp ? 'var(--green-text)' : 'var(--red-text)';
+
+  // Time labels
+  const fmtTime = d => d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const subEl = document.getElementById('port-chart-sub');
+  subEl.textContent = `${fmtTime(portHistory[0].t)} → ${fmtTime(portHistory[portHistory.length-1].t)}`;
+
+  const labels = portHistory.map(p => fmtTime(p.t));
+
+  const ctx = document.getElementById('port-chart').getContext('2d');
+  if(portChart) {
+    // Update data in place for smooth animation
+    portChart.data.labels = labels;
+    portChart.data.datasets[0].data = vals;
+    portChart.data.datasets[0].borderColor = color;
+    portChart.data.datasets[0].backgroundColor = colorBg;
+    portChart.update('none');
+    return;
+  }
+
+  portChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        borderColor: color,
+        backgroundColor: colorBg,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: color,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => items[0].label,
+            label: item => ' ' + f$(item.parsed.y)
+          },
+          backgroundColor: 'var(--surface)',
+          borderColor: 'var(--border-md)',
+          borderWidth: 1,
+          titleColor: 'var(--text2)',
+          bodyColor: 'var(--text)',
+          padding: 10,
+          displayColors: false
+        }
+      },
+      scales: {
+        x: {
+          display: true,
+          ticks: {
+            color: 'rgba(160,157,148,0.8)',
+            font: { size: 10, family: "'DM Sans', sans-serif" },
+            maxTicksLimit: 6,
+            maxRotation: 0
+          },
+          grid: { display: false },
+          border: { display: false }
+        },
+        y: {
+          display: true,
+          position: 'right',
+          ticks: {
+            color: 'rgba(160,157,148,0.8)',
+            font: { size: 10, family: "'Space Mono', monospace" },
+            maxTicksLimit: 4,
+            callback: v => '$' + (v>=1000 ? (v/1000).toFixed(1)+'k' : v.toFixed(0))
+          },
+          grid: {
+            color: 'rgba(160,157,148,0.1)',
+            drawBorder: false
+          },
+          border: { display: false }
+        }
+      },
+      animation: false
+    }
+  });
 }
 
 // ── BREAKDOWN TAB ──────────────────────────────────────────────────────────
