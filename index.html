@@ -122,9 +122,16 @@ tbody td:first-child{text-align:left}
 .alloc-bar{height:100%;border-radius:2px;transition:width .4s ease}
 .alloc-pct{font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);width:40px;text-align:right}
 .sector-row{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
-.sector-head{display:flex;justify-content:space-between}
-.sector-name{font-size:12px;font-weight:500}
-.sector-detail{font-size:11px;color:var(--text3)}
+.sector-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-radius:var(--r-md);padding:4px 2px;transition:background .12s}
+.sector-head:hover{background:var(--surface2)}
+.sector-chevron{font-size:10px;color:var(--text3);transition:transform .2s;flex-shrink:0;margin-left:6px}
+.sector-head.open .sector-chevron{transform:rotate(90deg)}
+.sector-holdings{overflow:hidden;max-height:0;transition:max-height .25s ease}
+.sector-holdings.open{max-height:500px}
+.sector-holding-row{display:flex;justify-content:space-between;align-items:center;padding:5px 4px;border-top:.5px solid var(--border)}
+.sector-holding-sym{font-family:'Space Mono',monospace;font-size:11px;font-weight:700}
+.sector-holding-name{font-size:11px;color:var(--text3);margin-top:1px}
+.sector-holding-pct{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text2)}
 .sector-bar-wrap{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
 .sector-bar{height:100%;border-radius:3px;transition:width .4s ease}
 .insight-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px}
@@ -557,6 +564,12 @@ function updateSortHeaders() {
     th.classList.remove('sort-asc', 'sort-desc');
     if (cols[i] === sortCol) th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
   });
+}
+
+function toggleSector(headEl) {
+  headEl.classList.toggle('open');
+  const holdings = headEl.closest('.sector-row').querySelector('.sector-holdings');
+  holdings.classList.toggle('open');
 }
 
 // ═══ RENDER PORTFOLIO ═══
@@ -1024,17 +1037,44 @@ function renderBreakdown() {
   // Sectors
   const sectorMap = {};
   posData.forEach(p => {
-    if (!sectorMap[p.sector]) sectorMap[p.sector] = { weight: 0, count: 0 };
+    if (!sectorMap[p.sector]) sectorMap[p.sector] = { weight: 0, count: 0, holdings: [] };
     sectorMap[p.sector].weight += p.weight;
     sectorMap[p.sector].count++;
+    sectorMap[p.sector].holdings.push(p);
   });
   const sorted = Object.entries(sectorMap).sort((a, b) => b[1].weight - a[1].weight);
   const sColors = ['#378ADD','#1D9E75','#BA7517','#D4537E','#534AB7','#639922','#5F5E5A'];
-  document.getElementById('sector-rows').innerHTML = sorted.map(([name, { weight, count }], i) => `
-    <div class="sector-row">
-      <div class="sector-head"><span class="sector-name">${name}</span><span class="sector-detail">${count} position${count !== 1 ? 's' : ''} · ${weight.toFixed(1)}%</span></div>
-      <div class="sector-bar-wrap"><div class="sector-bar" style="width:${weight.toFixed(1)}%;background:${sColors[i % sColors.length]}"></div></div>
-    </div>`).join('');
+
+  document.getElementById('sector-rows').innerHTML = sorted.map(([name, { weight, count, holdings }], i) => {
+    const color = sColors[i % sColors.length];
+    const holdingRows = holdings
+      .sort((a, b) => b.mktVal - a.mktVal)
+      .map(p => {
+        const pctOfSector = (p.weight / weight) * 100;
+        return `<div class="sector-holding-row">
+          <div>
+            <div class="sector-holding-sym">${p.sym}</div>
+            <div class="sector-holding-name">${NAMES[p.sym] || ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="sector-holding-pct">${pctOfSector.toFixed(1)}% of sector</div>
+            <div style="font-size:10px;color:var(--text3)">${p.weight.toFixed(1)}% of portfolio</div>
+          </div>
+        </div>`;
+      }).join('');
+
+    return `<div class="sector-row">
+      <div class="sector-head" onclick="toggleSector(this)">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span class="sector-name" style="font-size:12px;font-weight:500">${name}</span>
+          <span style="font-size:11px;color:var(--text3)">${count} position${count !== 1 ? 's' : ''} · ${weight.toFixed(1)}%</span>
+        </div>
+        <span class="sector-chevron">▶</span>
+      </div>
+      <div class="sector-bar-wrap"><div class="sector-bar" style="width:${weight.toFixed(1)}%;background:${color}"></div></div>
+      <div class="sector-holdings">${holdingRows}</div>
+    </div>`;
+  }).join('');
 
   // Concentration
   const top3 = posData.slice(0, 3).reduce((s, p) => s + p.weight, 0);
