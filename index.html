@@ -1021,16 +1021,18 @@ async function fetchAllPrevClose() {
 async function fetchYTD(sym) {
   if (!apiKey || sym === 'CASH' || ytdClose[sym] != null) return;
   try {
-    const now = new Date();
-    // Jan 1 of current year → first trading day close
-    const yearStart = Math.floor(Date.UTC(now.getUTCFullYear(), 0, 1) / 1000);
-    const jan31    = Math.floor(Date.UTC(now.getUTCFullYear(), 0, 31) / 1000);
-    const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=D&from=${yearStart}&to=${jan31}&token=${apiKey}`);
+    const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${sym}&metric=all&token=${apiKey}`);
     const d = await r.json();
-    if (d && d.s === 'ok' && d.c && d.c.length >= 1) {
-      // First candle of the year = the last close of previous year (what YTD is measured from)
-      ytdClose[sym] = d.c[0];
-      renderPortfolio();
+    if (d && d.metric) {
+      // yearToDatePriceReturnDaily is the YTD % return — store it directly as a special sentinel
+      const ytdPct = d.metric['yearToDatePriceReturnDaily'];
+      const q = quotes[sym];
+      if (ytdPct != null && q?.c) {
+        // Back-calculate the Jan 1 price from current price and YTD return
+        // price = ytdStart * (1 + ytdPct/100)  =>  ytdStart = price / (1 + ytdPct/100)
+        ytdClose[sym] = q.c / (1 + ytdPct / 100);
+        renderPortfolio();
+      }
     }
   } catch (e) { console.error('fetchYTD', sym, e); }
 }
