@@ -201,6 +201,7 @@ footer a{color:var(--text2)}
 <div class="page">
   <div class="tabs">
     <div class="tab active" id="tab-portfolio" onclick="showTab('portfolio')">Portfolio</div>
+    <div class="tab" id="tab-roth" onclick="showTab('roth')">Roth IRA</div>
     <div class="tab" id="tab-breakdown" onclick="showTab('breakdown')">Breakdown</div>
     <div class="tab" id="tab-market" onclick="showTab('market')">Market</div>
   </div>
@@ -255,6 +256,59 @@ footer a{color:var(--text2)}
         <button class="btn primary" style="margin-bottom:1px" onclick="addPosition()">Add</button>
       </div>
       <div class="msg" id="pos-msg"></div>
+    </div>
+  </div>
+
+  <!-- ROTH IRA -->
+  <div id="view-roth" style="display:none">
+    <div class="summary-strip">
+      <div class="sc"><div class="sc-label">Total Value</div><div class="sc-val" id="r-sum-value">—</div></div>
+      <div class="sc"><div class="sc-label">Total Cost</div><div class="sc-val" id="r-sum-cost">—</div></div>
+      <div class="sc"><div class="sc-label">Total Gain / Loss</div><div class="sc-val" id="r-sum-gl">—</div><div class="sc-sub flat" id="r-sum-gl-pct">—</div></div>
+      <div class="sc"><div class="sc-label">Day Change</div><div class="sc-val" id="r-sum-day">—</div><div class="sc-sub flat" id="r-sum-day-pct">—</div></div>
+    </div>
+
+    <div class="chart-panel" id="r-chart-panel" style="display:none">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title">Roth IRA — Today's P&amp;L</div>
+          <div class="chart-sub" id="r-chart-sub">Live session</div>
+        </div>
+        <div>
+          <div class="chart-val" id="r-chart-val">—</div>
+          <div class="chart-delta" id="r-chart-delta"></div>
+        </div>
+      </div>
+      <div style="height:180px;position:relative"><canvas id="r-chart"></canvas></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr id="r-thead">
+          <th onclick="rSortBy('sym')">Symbol</th>
+          <th onclick="rSortBy('price')">Price</th>
+          <th onclick="rSortBy('day')">Day</th>
+          <th onclick="rSortBy('shares')">Shares</th>
+          <th onclick="rSortBy('avgCost')">Avg Cost</th>
+          <th onclick="rSortBy('mktVal')">Mkt Value</th>
+          <th onclick="rSortBy('gl')">Gain / Loss</th>
+          <th onclick="rSortBy('glPct')">Return</th>
+          <th onclick="rSortBy('ytd')">YTD</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="r-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Add Position <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);font-size:11px">— tip: use symbol <span style="font-family:'Space Mono',monospace">CASH</span> to add a cash balance</span></div>
+      <div class="form-row">
+        <div class="form-group"><label>Symbol</label><input type="text" class="sym-in" id="r-pos-sym" placeholder="AAPL" maxlength="10" /></div>
+        <div class="form-group"><label>Shares</label><input type="number" class="num-in" id="r-pos-shares" placeholder="10" min="0" step="any" /></div>
+        <div class="form-group"><label>Avg Cost / Share ($)</label><input type="number" class="num-in" id="r-pos-cost" placeholder="150.00" min="0" step="any" /></div>
+        <button class="btn primary" style="margin-bottom:1px" onclick="rAddPosition()">Add</button>
+      </div>
+      <div class="msg" id="r-pos-msg"></div>
     </div>
   </div>
 
@@ -322,6 +376,19 @@ footer a{color:var(--text2)}
   </div>
 </div>
 
+<div class="modal-bg" id="r-edit-modal">
+  <div class="modal">
+    <h3 id="r-edit-title">Edit Position</h3>
+    <div class="form-group"><label id="r-edit-shares-label">Shares</label><input type="number" id="r-edit-shares" min="0" step="any" /></div>
+    <div class="form-group" id="r-edit-cost-group"><label>Avg Cost / Share ($)</label><input type="number" id="r-edit-cost" min="0" step="any" /></div>
+    <div class="modal-btns">
+      <button class="btn danger" onclick="rRemovePosition()">Remove</button>
+      <button class="btn" onclick="rCloseModal()">Cancel</button>
+      <button class="btn primary" onclick="rSavePosition()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="edit-modal">
   <div class="modal">
     <h3 id="edit-title">Edit Position</h3>
@@ -346,8 +413,11 @@ let sortCol = 'sym', sortDir = 1;
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
 let watchlist = JSON.parse(localStorage.getItem('mkt_watchlist') || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
+let rPortfolio = JSON.parse(localStorage.getItem('roth_portfolio') || '{}');
 let quotes = {}, prevClose = {}, ytdClose = {};
 const portHistory = [];
+const rHistory = [];
+let rChart = null, rSortColV = 'sym', rSortDirV = 1, rEditingSym = null;
 
 const NAMES = {
   AAPL:'Apple',MSFT:'Microsoft',GOOGL:'Alphabet',NVDA:'NVIDIA',TSLA:'Tesla',
@@ -384,11 +454,13 @@ const arr = d => d === 'up' ? '▲' : d === 'dn' ? '▼' : '';
 function save() {
   localStorage.setItem('mkt_portfolio', JSON.stringify(portfolio));
   localStorage.setItem('mkt_watchlist', JSON.stringify(watchlist));
+  localStorage.setItem('roth_portfolio', JSON.stringify(rPortfolio));
 }
 
 function allSyms() {
   const heatmapSyms = Object.values(HEATMAP_SECTORS).flat();
-  return [...new Set([...Object.keys(portfolio).filter(s => s !== 'CASH'), ...watchlist, ...heatmapSyms])];
+  const all = [...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH');
+  return [...new Set([...all, ...watchlist, ...heatmapSyms])];
 }
 
 function setBadge(s) {
@@ -407,7 +479,7 @@ function setMsg(id, txt, type = '') {
 }
 
 function showTab(tab) {
-  ['portfolio', 'breakdown', 'market'].forEach(t => {
+  ['portfolio', 'roth', 'breakdown', 'market'].forEach(t => {
     document.getElementById('view-' + t).style.display = t === tab ? '' : 'none';
     document.getElementById('tab-' + t).className = 'tab' + (t === tab ? ' active' : '');
   });
@@ -535,6 +607,170 @@ function setSummary(val, cost, gl, glPct, dayGL, dayPct) {
   dPEl.textContent = dayPct != null ? fp(dayPct) : '—'; dPEl.className = 'sc-sub ' + (dayPct != null ? dir(dayPct) : 'flat');
   if (dayGL != null) pushChartPoint(dayGL);
 }
+
+// ═══ ROTH IRA ═══
+function rSortBy(col) {
+  if (rSortColV === col) rSortDirV *= -1;
+  else { rSortColV = col; rSortDirV = col === 'sym' ? 1 : -1; }
+  renderRoth();
+}
+
+function rUpdateHeaders() {
+  const cols = ['sym','price','day','shares','avgCost','mktVal','gl','glPct','ytd'];
+  document.querySelectorAll('#r-thead th').forEach((th, i) => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (cols[i] === rSortColV) th.classList.add(rSortDirV === 1 ? 'sort-asc' : 'sort-desc');
+  });
+}
+
+function renderRoth() {
+  const tbody = document.getElementById('r-tbody');
+  tbody.innerHTML = '';
+  const syms = Object.keys(rPortfolio);
+  if (!syms.length) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px">No positions yet — add one below.</td></tr>`;
+    rSetSummary(null,null,null,null,null,null); rUpdateHeaders(); return;
+  }
+  let totalVal=0, totalCost=0, totalDayGL=0, hasPrices=false;
+  const rows = syms.map(sym => {
+    const pos=rPortfolio[sym], isCash=sym==='CASH', q=isCash?null:quotes[sym];
+    const price=isCash?1:(q?q.c:null);
+    const mktVal=isCash?pos.shares:(price!=null?price*pos.shares:null);
+    const cost=isCash?pos.shares:pos.avgCost*pos.shares;
+    const gl=isCash?0:(mktVal!=null?mktVal-cost:null);
+    const glPct=isCash?0:(gl!=null&&cost>0?(gl/cost)*100:null);
+    const pc=prevClose[sym]??q?.pc??null;
+    const dayGL=isCash?null:(q&&pc!=null?(q.c-pc)*pos.shares:null);
+    const dayPct=isCash?null:(q&&pc!=null?((q.c-pc)/pc)*100:null);
+    if(mktVal!=null){totalVal+=mktVal;if(!isCash)hasPrices=true;}
+    totalCost+=cost; if(dayGL!=null)totalDayGL+=dayGL;
+    return {sym,pos,isCash,price,mktVal,cost,gl,glPct,dayGL,dayPct};
+  });
+  const cashRows=rows.filter(r=>r.isCash), stockRows=rows.filter(r=>!r.isCash);
+  const gv = r => {
+    switch(rSortColV){
+      case 'sym': return r.sym; case 'price': return r.price??-Infinity;
+      case 'day': return r.dayPct??-Infinity; case 'shares': return r.pos.shares;
+      case 'avgCost': return r.pos.avgCost; case 'mktVal': return r.mktVal??-Infinity;
+      case 'gl': return r.gl??-Infinity; case 'glPct': return r.glPct??-Infinity;
+      case 'ytd': return ytdClose[r.sym]&&r.price!=null?((r.price-ytdClose[r.sym])/ytdClose[r.sym])*100:-Infinity;
+      default: return 0;
+    }
+  };
+  stockRows.sort((a,b)=>{ const va=gv(a),vb=gv(b); return typeof va==='string'?va.localeCompare(vb)*rSortDirV:(va-vb)*rSortDirV; });
+  [...stockRows,...cashRows].forEach(({sym,pos,isCash,price,mktVal,gl,glPct,dayGL,dayPct})=>{
+    const glD=dir(gl),dayD=dir(dayGL),tr=document.createElement('tr');
+    if(isCash){
+      tr.innerHTML=`<td><div class="td-sym" style="color:var(--text2)">CASH</div><div class="td-name">Cash balance</div></td>
+        <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
+        <td class="td-mono">${f$(pos.shares)}</td><td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
+        <td><button class="btn sm" onclick="rOpenEdit('${sym}')">Edit</button></td>`;
+    } else {
+      const yc=ytdClose[sym],ytdPct=yc&&price!=null?((price-yc)/yc)*100:null,ytdD=dir(ytdPct);
+      tr.innerHTML=`<td><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym]||''}</div></td>
+        <td class="td-mono">${price!=null?f$(price):'—'}</td>
+        <td>${dayPct!=null?`<span class="pill ${dayD}">${arr(dayD)} ${fp(dayPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+        <td class="td-mono">${pos.shares.toLocaleString()}</td><td class="td-mono">${f$(pos.avgCost)}</td>
+        <td class="td-mono">${mktVal!=null?f$(mktVal):'—'}</td>
+        <td class="td-mono ${glD}">${gl!=null?fs$(gl):'—'}</td>
+        <td>${glPct!=null?`<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+        <td>${ytdPct!=null?`<span class="pill ${ytdD}">${arr(ytdD)} ${fp(ytdPct)}</span>`:'<span style="color:var(--text3);font-size:11px">…</span>'}</td>
+        <td><button class="btn sm" onclick="rOpenEdit('${sym}')">Edit</button></td>`;
+    }
+    tbody.appendChild(tr);
+  });
+  const totalGL=hasPrices?totalVal-totalCost:null;
+  const totalGLPct=(totalGL!=null&&totalCost>0)?(totalGL/totalCost)*100:null;
+  const base=totalVal-totalDayGL, totalDayPct=base>0?(totalDayGL/base)*100:null;
+  rSetSummary(totalVal>0?totalVal:null,totalCost,totalGL,totalGLPct,hasPrices?totalDayGL:null,hasPrices?totalDayPct:null);
+  rUpdateHeaders();
+}
+
+function rSetSummary(val,cost,gl,glPct,dayGL,dayPct){
+  document.getElementById('r-sum-value').textContent=val!=null?f$(val):'—';
+  document.getElementById('r-sum-cost').textContent=cost!=null?f$(cost):'—';
+  const glEl=document.getElementById('r-sum-gl'),glPEl=document.getElementById('r-sum-gl-pct');
+  glEl.textContent=gl!=null?fs$(gl):'—'; glEl.className='sc-val '+(gl!=null?dir(gl):'flat');
+  glPEl.textContent=glPct!=null?fp(glPct):'—'; glPEl.className='sc-sub '+(glPct!=null?dir(glPct):'flat');
+  const dEl=document.getElementById('r-sum-day'),dPEl=document.getElementById('r-sum-day-pct');
+  dEl.textContent=dayGL!=null?fs$(dayGL):'—'; dEl.className='sc-val '+(dayGL!=null?dir(dayGL):'flat');
+  dPEl.textContent=dayPct!=null?fp(dayPct):'—'; dPEl.className='sc-sub '+(dayPct!=null?dir(dayPct):'flat');
+  if(dayGL!=null) rPushChart(dayGL);
+}
+
+function rPushChart(val,t=null,seeded=false){
+  const now=t||new Date(), last=rHistory[rHistory.length-1];
+  if(!seeded&&last&&Math.abs(last.v-val)<0.01&&(now-last.t)<5000) return;
+  rHistory.push({t:now,v:val}); if(rHistory.length>400) rHistory.shift();
+  rRenderChart();
+}
+
+function rRenderChart(){
+  const wrap=document.getElementById('r-chart-panel');
+  if(rHistory.length<2){wrap.style.display='none';return;}
+  wrap.style.display='';
+  const vals=rHistory.map(p=>p.v), last=vals[vals.length-1], isUp=last>=0;
+  const color=isUp?'#1a9470':'#d94545', colorBg=isUp?'rgba(26,148,112,.07)':'rgba(217,69,69,.07)';
+  const valEl=document.getElementById('r-chart-val');
+  valEl.textContent=fs$(last); valEl.style.color=isUp?'var(--green-text)':'var(--red-text)';
+  const dEl=document.getElementById('r-chart-delta'), dp=document.getElementById('r-sum-day-pct')?.textContent||'';
+  dEl.textContent=(dp&&dp!=='—'?dp+' ':'')+' today'; dEl.style.color=valEl.style.color;
+  const fmt=d=>d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('r-chart-sub').textContent=`${fmt(rHistory[0].t)} → ${fmt(rHistory[rHistory.length-1].t)}`;
+  const labels=rHistory.map(p=>fmt(p.t));
+  const ctx=document.getElementById('r-chart').getContext('2d');
+  if(rChart){rChart.data.labels=labels;rChart.data.datasets[0].data=vals;rChart.data.datasets[0].borderColor=color;rChart.data.datasets[0].backgroundColor=colorBg;rChart.update('none');return;}
+  rChart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data:vals,borderColor:color,backgroundColor:colorBg,borderWidth:2,pointRadius:0,pointHoverRadius:4,fill:true,tension:0.3}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>' '+fs$(i.parsed.y)},displayColors:false}},
+      scales:{
+        x:{ticks:{color:'rgba(160,157,148,.8)',font:{size:10},maxTicksLimit:6,maxRotation:0},grid:{display:false},border:{display:false}},
+        y:{position:'right',ticks:{color:'rgba(160,157,148,.8)',font:{size:10},maxTicksLimit:5,callback:v=>{const a=Math.abs(v),s=a>=1000?(a/1000).toFixed(1)+'k':a.toFixed(0);return(v>=0?'+$':'-$')+s;}},
+          grid:{color:c=>c.tick.value===0?'rgba(160,157,148,.4)':'rgba(160,157,148,.08)',lineWidth:c=>c.tick.value===0?1.5:1,drawBorder:false},border:{display:false}}
+      },animation:false}});
+}
+
+function rAddPosition(){
+  const sym=document.getElementById('r-pos-sym').value.trim().toUpperCase();
+  const sharesRaw=document.getElementById('r-pos-shares').value;
+  const costRaw=document.getElementById('r-pos-cost').value;
+  if(!sym){setMsg('r-pos-msg','Enter a symbol.','err');return;}
+  if(sym==='CASH'){
+    const amt=parseFloat(sharesRaw);
+    if(isNaN(amt)||amt<=0){setMsg('r-pos-msg','Enter the cash amount in the Shares field.','err');return;}
+    rPortfolio['CASH']={shares:amt,avgCost:1}; save();
+    document.getElementById('r-pos-sym').value=''; document.getElementById('r-pos-shares').value=''; document.getElementById('r-pos-cost').value='';
+    setMsg('r-pos-msg',`Cash balance set to ${f$(amt)}`,'ok'); renderRoth(); return;
+  }
+  const shares=parseFloat(sharesRaw), cost=parseFloat(costRaw);
+  if(isNaN(shares)||shares<=0){setMsg('r-pos-msg','Enter a valid share count.','err');return;}
+  if(isNaN(cost)||cost<=0){setMsg('r-pos-msg','Enter a valid avg cost.','err');return;}
+  rPortfolio[sym]={shares,avgCost:cost}; save();
+  document.getElementById('r-pos-sym').value=''; document.getElementById('r-pos-shares').value=''; document.getElementById('r-pos-cost').value='';
+  setMsg('r-pos-msg',`Added ${sym} — ${shares} shares @ ${f$(cost)}`,'ok');
+  renderRoth();
+  if(apiKey){fetchQuote(sym);fetchPrevClose(sym);fetchYTD(sym);}
+}
+
+function rOpenEdit(sym){
+  rEditingSym=sym; const pos=rPortfolio[sym], isCash=sym==='CASH';
+  document.getElementById('r-edit-title').textContent=isCash?'Edit Cash Balance':'Edit '+sym;
+  document.getElementById('r-edit-shares-label').textContent=isCash?'Amount ($)':'Shares';
+  document.getElementById('r-edit-shares').value=pos.shares;
+  document.getElementById('r-edit-cost').value=isCash?'':pos.avgCost;
+  document.getElementById('r-edit-cost-group').style.display=isCash?'none':'';
+  document.getElementById('r-edit-modal').classList.add('open');
+}
+function rCloseModal(){document.getElementById('r-edit-modal').classList.remove('open');rEditingSym=null;}
+function rSavePosition(){
+  if(!rEditingSym) return;
+  const shares=parseFloat(document.getElementById('r-edit-shares').value);
+  if(isNaN(shares)||shares<=0) return;
+  if(rEditingSym==='CASH'){rPortfolio['CASH']={shares,avgCost:1};}
+  else{const cost=parseFloat(document.getElementById('r-edit-cost').value);if(isNaN(cost)||cost<=0)return;rPortfolio[rEditingSym]={shares,avgCost:cost};}
+  save(); rCloseModal(); renderRoth();
+}
+function rRemovePosition(){if(!rEditingSym)return;delete rPortfolio[rEditingSym];save();rCloseModal();renderRoth();}
 
 // ═══ LIVE CHART ═══
 function pushChartPoint(val, t = null, seeded = false) {
@@ -988,7 +1224,7 @@ async function fetchQuote(sym) {
     const d = await r.json();
     if (d && d.c) {
       quotes[sym] = d;
-      renderPortfolio(); renderMarket();
+      renderPortfolio(); renderRoth(); renderMarket();
     }  } catch (e) { console.error('fetchQuote', sym, e); }
 }
 
@@ -1015,7 +1251,8 @@ async function fetchPrevClose(sym) {
 }
 
 async function fetchAllPrevClose() {
-  for (const s of Object.keys(portfolio).filter(s => s !== 'CASH')) await fetchPrevClose(s);
+  const syms = [...new Set([...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH'))];
+  for (const s of syms) await fetchPrevClose(s);
 }
 
 async function fetchYTD(sym) {
@@ -1104,7 +1341,7 @@ function connect() {
           if (!quotes[s]) quotes[s] = { c: t.p, pc: t.p, o: t.p, h: t.p, l: t.p };
           else quotes[s].c = t.p;
         });
-        renderPortfolio(); renderMarket();
+        renderPortfolio(); renderRoth(); renderMarket();
       }
     };
     ws.onerror = () => { setBadge('poll'); scheduleNextPoll(); };
@@ -1126,10 +1363,15 @@ document.getElementById('pos-shares').addEventListener('keydown', e => { if (e.k
 document.getElementById('pos-cost').addEventListener('keydown', e => { if (e.key === 'Enter') addPosition(); });
 document.getElementById('watch-sym').addEventListener('keydown', e => { if (e.key === 'Enter') addWatchSymbol(); });
 document.getElementById('edit-modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+document.getElementById('r-pos-sym').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('r-pos-shares').focus(); });
+document.getElementById('r-pos-shares').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('r-pos-cost').focus(); });
+document.getElementById('r-pos-cost').addEventListener('keydown', e => { if (e.key === 'Enter') rAddPosition(); });
+document.getElementById('r-edit-modal').addEventListener('click', function(e) { if (e.target === this) rCloseModal(); });
 
 // ═══ INIT ═══
 if (apiKey) document.getElementById('api-key').value = apiKey;
 renderPortfolio();
+renderRoth();
 renderMarket();
 renderChips();
 if (apiKey) connect();
