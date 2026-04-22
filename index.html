@@ -201,7 +201,6 @@ footer a{color:var(--text2)}
 <div class="page">
   <div class="tabs">
     <div class="tab active" id="tab-portfolio" onclick="showTab('portfolio')">Portfolio</div>
-    <div class="tab" id="tab-roth" onclick="showTab('roth')">Roth IRA</div>
     <div class="tab" id="tab-breakdown" onclick="showTab('breakdown')">Breakdown</div>
     <div class="tab" id="tab-market" onclick="showTab('market')">Market</div>
   </div>
@@ -259,60 +258,7 @@ footer a{color:var(--text2)}
     </div>
   </div>
 
-  <!-- ROTH IRA -->
-  <div id="view-roth" style="display:none">
-    <div class="summary-strip">
-      <div class="sc"><div class="sc-label">Total Value</div><div class="sc-val" id="roth-sum-value">—</div></div>
-      <div class="sc"><div class="sc-label">Total Cost</div><div class="sc-val" id="roth-sum-cost">—</div></div>
-      <div class="sc"><div class="sc-label">Total Gain / Loss</div><div class="sc-val" id="roth-sum-gl">—</div><div class="sc-sub flat" id="roth-sum-gl-pct">—</div></div>
-      <div class="sc"><div class="sc-label">Day Change</div><div class="sc-val" id="roth-sum-day">—</div><div class="sc-sub flat" id="roth-sum-day-pct">—</div></div>
-    </div>
-
-    <div class="chart-panel" id="roth-chart-panel" style="display:none">
-      <div class="chart-head">
-        <div>
-          <div class="chart-title">Today's P&amp;L — Roth IRA</div>
-          <div class="chart-sub" id="roth-chart-sub">Live session</div>
-        </div>
-        <div>
-          <div class="chart-val" id="roth-chart-val">—</div>
-          <div class="chart-delta" id="roth-chart-delta"></div>
-        </div>
-      </div>
-      <div style="height:180px;position:relative"><canvas id="roth-chart"></canvas></div>
-    </div>
-
-    <div class="table-wrap">
-      <table>
-        <thead><tr id="roth-thead">
-          <th onclick="rothSortBy('sym')">Symbol</th>
-          <th onclick="rothSortBy('price')">Price</th>
-          <th onclick="rothSortBy('day')">Day</th>
-          <th onclick="rothSortBy('shares')">Shares</th>
-          <th onclick="rothSortBy('avgCost')">Avg Cost</th>
-          <th onclick="rothSortBy('mktVal')">Mkt Value</th>
-          <th onclick="rothSortBy('gl')">Gain / Loss</th>
-          <th onclick="rothSortBy('glPct')">Return</th>
-          <th onclick="rothSortBy('ytd')">YTD</th>
-          <th></th>
-        </tr></thead>
-        <tbody id="roth-tbody"></tbody>
-      </table>
-    </div>
-
-    <div class="panel">
-      <div class="panel-title">Add Position <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);font-size:11px">— tip: use symbol <span style="font-family:'Space Mono',monospace">CASH</span> to add a cash balance</span></div>
-      <div class="form-row">
-        <div class="form-group"><label>Symbol</label><input type="text" class="sym-in" id="roth-sym" placeholder="AAPL" maxlength="10" /></div>
-        <div class="form-group"><label>Shares</label><input type="number" class="num-in" id="roth-shares" placeholder="10" min="0" step="any" /></div>
-        <div class="form-group"><label>Avg Cost / Share ($)</label><input type="number" class="num-in" id="roth-cost" placeholder="150.00" min="0" step="any" /></div>
-        <button class="btn primary" style="margin-bottom:1px" onclick="rothAddPosition()">Add</button>
-      </div>
-      <div class="msg" id="roth-msg"></div>
-    </div>
-  </div>
-
-
+  <!-- BREAKDOWN -->
   <div id="view-breakdown" style="display:none">
     <div id="breakdown-empty" class="empty" style="display:none">Add positions in the Portfolio tab to see your breakdown.</div>
     <div id="breakdown-content">
@@ -376,18 +322,7 @@ footer a{color:var(--text2)}
   </div>
 </div>
 
-<div class="modal-bg" id="roth-edit-modal">
-  <div class="modal">
-    <h3 id="roth-edit-title">Edit Position</h3>
-    <div class="form-group"><label id="roth-edit-shares-label">Shares</label><input type="number" id="roth-edit-shares" min="0" step="any" /></div>
-    <div class="form-group" id="roth-edit-cost-group"><label>Avg Cost / Share ($)</label><input type="number" id="roth-edit-cost" min="0" step="any" /></div>
-    <div class="modal-btns">
-      <button class="btn danger" onclick="rothRemovePosition()">Remove</button>
-      <button class="btn" onclick="rothCloseModal()">Cancel</button>
-      <button class="btn primary" onclick="rothSavePosition()">Save</button>
-    </div>
-  </div>
-</div>
+<div class="modal-bg" id="edit-modal">
   <div class="modal">
     <h3 id="edit-title">Edit Position</h3>
     <div class="form-group"><label id="edit-shares-label">Shares</label><input type="number" id="edit-shares" min="0" step="any" /></div>
@@ -406,17 +341,13 @@ footer a{color:var(--text2)}
 // ═══ STATE ═══
 let apiKey = localStorage.getItem('finnhub_key') || '';
 let ws = null, refreshInterval = null, editingSym = null, activeMarketSym = null;
-let portChart = null, rothChart = null, donutChart = null;
+let portChart = null, donutChart = null;
 let sortCol = 'sym', sortDir = 1;
-let rothSortCol = 'sym', rothSortDir = 1;
-let rothEditingSym = null;
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
 let watchlist = JSON.parse(localStorage.getItem('mkt_watchlist') || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
-let rothPortfolio = JSON.parse(localStorage.getItem('roth_portfolio') || '{}');
 let quotes = {}, prevClose = {}, ytdClose = {};
-const portHistory = []; // [{t, v}]
-const rothHistory = []; // [{t, v}]
+const portHistory = [];
 
 const NAMES = {
   AAPL:'Apple',MSFT:'Microsoft',GOOGL:'Alphabet',NVDA:'NVIDIA',TSLA:'Tesla',
@@ -453,14 +384,11 @@ const arr = d => d === 'up' ? '▲' : d === 'dn' ? '▼' : '';
 function save() {
   localStorage.setItem('mkt_portfolio', JSON.stringify(portfolio));
   localStorage.setItem('mkt_watchlist', JSON.stringify(watchlist));
-  localStorage.setItem('roth_portfolio', JSON.stringify(rothPortfolio));
 }
 
 function allSyms() {
   const heatmapSyms = Object.values(HEATMAP_SECTORS).flat();
-  const portSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
-  const rothSyms = Object.keys(rothPortfolio).filter(s => s !== 'CASH');
-  return [...new Set([...portSyms, ...rothSyms, ...watchlist, ...heatmapSyms])];
+  return [...new Set([...Object.keys(portfolio).filter(s => s !== 'CASH'), ...watchlist, ...heatmapSyms])];
 }
 
 function setBadge(s) {
@@ -479,7 +407,7 @@ function setMsg(id, txt, type = '') {
 }
 
 function showTab(tab) {
-  ['portfolio', 'roth', 'breakdown', 'market'].forEach(t => {
+  ['portfolio', 'breakdown', 'market'].forEach(t => {
     document.getElementById('view-' + t).style.display = t === tab ? '' : 'none';
     document.getElementById('tab-' + t).className = 'tab' + (t === tab ? ' active' : '');
   });
@@ -493,25 +421,11 @@ function sortBy(col) {
   renderPortfolio();
 }
 
-function rothSortBy(col) {
-  if (rothSortCol === col) rothSortDir *= -1;
-  else { rothSortCol = col; rothSortDir = col === 'sym' ? 1 : -1; }
-  renderRoth();
-}
-
 function updateSortHeaders() {
   const cols = ['sym','price','day','shares','avgCost','mktVal','gl','glPct','ytd'];
   document.querySelectorAll('#port-thead th').forEach((th, i) => {
     th.classList.remove('sort-asc', 'sort-desc');
     if (cols[i] === sortCol) th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
-  });
-}
-
-function rothUpdateSortHeaders() {
-  const cols = ['sym','price','day','shares','avgCost','mktVal','gl','glPct','ytd'];
-  document.querySelectorAll('#roth-thead th').forEach((th, i) => {
-    th.classList.remove('sort-asc', 'sort-desc');
-    if (cols[i] === rothSortCol) th.classList.add(rothSortDir === 1 ? 'sort-asc' : 'sort-desc');
   });
 }
 
@@ -620,234 +534,6 @@ function setSummary(val, cost, gl, glPct, dayGL, dayPct) {
   dEl.textContent = dayGL != null ? fs$(dayGL) : '—'; dEl.className = 'sc-val ' + (dayGL != null ? dir(dayGL) : 'flat');
   dPEl.textContent = dayPct != null ? fp(dayPct) : '—'; dPEl.className = 'sc-sub ' + (dayPct != null ? dir(dayPct) : 'flat');
   if (dayGL != null) pushChartPoint(dayGL);
-}
-
-// ═══ ROTH IRA ═══
-function renderRoth() {
-  const tbody = document.getElementById('roth-tbody');
-  tbody.innerHTML = '';
-  const syms = Object.keys(rothPortfolio);
-
-  if (!syms.length) {
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px">No positions yet — add one below.</td></tr>`;
-    setRothSummary(null, null, null, null, null, null);
-    rothUpdateSortHeaders();
-    return;
-  }
-
-  let totalVal = 0, totalCost = 0, totalDayGL = 0, hasPrices = false;
-  const rows = syms.map(sym => {
-    const pos = rothPortfolio[sym];
-    const isCash = sym === 'CASH';
-    const q = isCash ? null : quotes[sym];
-    const price = isCash ? 1 : (q ? q.c : null);
-    const mktVal = isCash ? pos.shares : (price != null ? price * pos.shares : null);
-    const cost = isCash ? pos.shares : pos.avgCost * pos.shares;
-    const gl = isCash ? 0 : (mktVal != null ? mktVal - cost : null);
-    const glPct = isCash ? 0 : (gl != null && cost > 0 ? (gl / cost) * 100 : null);
-    const pc = prevClose[sym] ?? q?.pc ?? null;
-    const dayGL = isCash ? null : (q && pc != null ? (q.c - pc) * pos.shares : null);
-    const dayPct = isCash ? null : (q && pc != null ? ((q.c - pc) / pc) * 100 : null);
-    if (mktVal != null) { totalVal += mktVal; if (!isCash) hasPrices = true; }
-    totalCost += cost;
-    if (dayGL != null) totalDayGL += dayGL;
-    return { sym, pos, isCash, price, mktVal, cost, gl, glPct, dayGL, dayPct };
-  });
-
-  const cashRows = rows.filter(r => r.isCash);
-  const stockRows = rows.filter(r => !r.isCash);
-  const getSortVal = r => {
-    switch (rothSortCol) {
-      case 'sym': return r.sym;
-      case 'price': return r.price ?? -Infinity;
-      case 'day': return r.dayPct ?? -Infinity;
-      case 'shares': return r.pos.shares;
-      case 'avgCost': return r.pos.avgCost;
-      case 'mktVal': return r.mktVal ?? -Infinity;
-      case 'gl': return r.gl ?? -Infinity;
-      case 'glPct': return r.glPct ?? -Infinity;
-      case 'ytd': return ytdClose[r.sym] && r.price != null ? ((r.price - ytdClose[r.sym]) / ytdClose[r.sym]) * 100 : -Infinity;
-      default: return 0;
-    }
-  };
-  stockRows.sort((a, b) => {
-    const va = getSortVal(a), vb = getSortVal(b);
-    if (typeof va === 'string') return va.localeCompare(vb) * rothSortDir;
-    return (va - vb) * rothSortDir;
-  });
-
-  [...stockRows, ...cashRows].forEach(r => {
-    const { sym, pos, isCash, price, mktVal, gl, glPct, dayGL, dayPct } = r;
-    const glD = dir(gl), dayD = dir(dayGL);
-    const tr = document.createElement('tr');
-    if (isCash) {
-      tr.innerHTML = `
-        <td><div class="td-sym" style="color:var(--text2)">CASH</div><div class="td-name">Cash balance</div></td>
-        <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
-        <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
-        <td class="td-mono">${f$(pos.shares)}</td>
-        <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
-        <td style="color:var(--text3)">—</td>
-        <td><button class="btn sm" onclick="rothOpenEdit('${sym}')">Edit</button></td>`;
-    } else {
-      const yc = ytdClose[sym];
-      const ytdPct = yc && price != null ? ((price - yc) / yc) * 100 : null;
-      const ytdD = dir(ytdPct);
-      tr.innerHTML = `
-        <td><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym] || ''}</div></td>
-        <td class="td-mono">${price != null ? f$(price) : '—'}</td>
-        <td>${dayPct != null ? `<span class="pill ${dayD}">${arr(dayD)} ${fp(dayPct)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
-        <td class="td-mono">${pos.shares.toLocaleString()}</td>
-        <td class="td-mono">${f$(pos.avgCost)}</td>
-        <td class="td-mono">${mktVal != null ? f$(mktVal) : '—'}</td>
-        <td class="td-mono ${glD}">${gl != null ? fs$(gl) : '—'}</td>
-        <td>${glPct != null ? `<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
-        <td>${ytdPct != null ? `<span class="pill ${ytdD}">${arr(ytdD)} ${fp(ytdPct)}</span>` : '<span style="color:var(--text3);font-size:11px">…</span>'}</td>
-        <td><button class="btn sm" onclick="rothOpenEdit('${sym}')">Edit</button></td>`;
-    }
-    tbody.appendChild(tr);
-  });
-
-  const totalGL = hasPrices ? totalVal - totalCost : null;
-  const totalGLPct = (totalGL != null && totalCost > 0) ? (totalGL / totalCost) * 100 : null;
-  const baseline = totalVal - totalDayGL;
-  const totalDayPct = baseline > 0 ? (totalDayGL / baseline) * 100 : null;
-  setRothSummary(totalVal > 0 ? totalVal : null, totalCost, totalGL, totalGLPct, hasPrices ? totalDayGL : null, hasPrices ? totalDayPct : null);
-  rothUpdateSortHeaders();
-}
-
-function setRothSummary(val, cost, gl, glPct, dayGL, dayPct) {
-  document.getElementById('roth-sum-value').textContent = val != null ? f$(val) : '—';
-  document.getElementById('roth-sum-cost').textContent = cost != null ? f$(cost) : '—';
-  const glEl = document.getElementById('roth-sum-gl'), glPEl = document.getElementById('roth-sum-gl-pct');
-  glEl.textContent = gl != null ? fs$(gl) : '—'; glEl.className = 'sc-val ' + (gl != null ? dir(gl) : 'flat');
-  glPEl.textContent = glPct != null ? fp(glPct) : '—'; glPEl.className = 'sc-sub ' + (glPct != null ? dir(glPct) : 'flat');
-  const dEl = document.getElementById('roth-sum-day'), dPEl = document.getElementById('roth-sum-day-pct');
-  dEl.textContent = dayGL != null ? fs$(dayGL) : '—'; dEl.className = 'sc-val ' + (dayGL != null ? dir(dayGL) : 'flat');
-  dPEl.textContent = dayPct != null ? fp(dayPct) : '—'; dPEl.className = 'sc-sub ' + (dayPct != null ? dir(dayPct) : 'flat');
-  if (dayGL != null) pushRothChartPoint(dayGL);
-}
-
-function pushRothChartPoint(val, t = null, seeded = false) {
-  const now = t || new Date();
-  const last = rothHistory[rothHistory.length - 1];
-  if (!seeded && last && Math.abs(last.v - val) < 0.01 && (now - last.t) < 5000) return;
-  rothHistory.push({ t: now, v: val });
-  if (rothHistory.length > 400) rothHistory.shift();
-  renderRothChart();
-}
-
-function renderRothChart() {
-  const wrap = document.getElementById('roth-chart-panel');
-  if (rothHistory.length < 2) { wrap.style.display = 'none'; return; }
-  wrap.style.display = '';
-  const vals = rothHistory.map(p => p.v);
-  const last = vals[vals.length - 1];
-  const isUp = last >= 0;
-  const color = isUp ? '#1a9470' : '#d94545';
-  const colorBg = isUp ? 'rgba(26,148,112,.07)' : 'rgba(217,69,69,.07)';
-  const valEl = document.getElementById('roth-chart-val');
-  valEl.textContent = fs$(last);
-  valEl.style.color = isUp ? 'var(--green-text)' : 'var(--red-text)';
-  const deltaEl = document.getElementById('roth-chart-delta');
-  const dayPct = document.getElementById('roth-sum-day-pct')?.textContent || '';
-  deltaEl.textContent = (dayPct && dayPct !== '—' ? dayPct + ' ' : '') + 'today';
-  deltaEl.style.color = isUp ? 'var(--green-text)' : 'var(--red-text)';
-  const fmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  document.getElementById('roth-chart-sub').textContent = `${fmt(rothHistory[0].t)} → ${fmt(rothHistory[rothHistory.length - 1].t)}`;
-  const labels = rothHistory.map(p => fmt(p.t));
-  const ctx = document.getElementById('roth-chart').getContext('2d');
-  if (rothChart) {
-    rothChart.data.labels = labels;
-    rothChart.data.datasets[0].data = vals;
-    rothChart.data.datasets[0].borderColor = color;
-    rothChart.data.datasets[0].backgroundColor = colorBg;
-    rothChart.update('none');
-    return;
-  }
-  rothChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels, datasets: [{ data: vals, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y) }, displayColors: false } },
-      scales: {
-        x: { ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { display: false }, border: { display: false } },
-        y: { position: 'right',
-          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v); const s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
-          grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
-          border: { display: false }
-        }
-      },
-      animation: false
-    }
-  });
-}
-
-// Roth position management
-function rothAddPosition() {
-  const sym = document.getElementById('roth-sym').value.trim().toUpperCase();
-  const sharesRaw = document.getElementById('roth-shares').value;
-  const costRaw = document.getElementById('roth-cost').value;
-  if (!sym) { setMsg('roth-msg', 'Enter a symbol.', 'err'); return; }
-  if (sym === 'CASH') {
-    const amt = parseFloat(sharesRaw);
-    if (isNaN(amt) || amt <= 0) { setMsg('roth-msg', 'Enter the cash amount in the Shares field.', 'err'); return; }
-    rothPortfolio['CASH'] = { shares: amt, avgCost: 1 };
-    save();
-    document.getElementById('roth-sym').value = '';
-    document.getElementById('roth-shares').value = '';
-    document.getElementById('roth-cost').value = '';
-    setMsg('roth-msg', `Cash balance set to ${f$(amt)}`, 'ok');
-    renderRoth();
-    return;
-  }
-  const shares = parseFloat(sharesRaw);
-  const cost = parseFloat(costRaw);
-  if (isNaN(shares) || shares <= 0) { setMsg('roth-msg', 'Enter a valid share count.', 'err'); return; }
-  if (isNaN(cost) || cost <= 0) { setMsg('roth-msg', 'Enter a valid avg cost.', 'err'); return; }
-  rothPortfolio[sym] = { shares, avgCost: cost };
-  save();
-  document.getElementById('roth-sym').value = '';
-  document.getElementById('roth-shares').value = '';
-  document.getElementById('roth-cost').value = '';
-  setMsg('roth-msg', `Added ${sym} — ${shares} shares @ ${f$(cost)}`, 'ok');
-  renderRoth();
-  if (apiKey) { fetchQuote(sym); fetchPrevClose(sym); fetchYTD(sym); }
-}
-
-function rothOpenEdit(sym) {
-  rothEditingSym = sym;
-  const pos = rothPortfolio[sym];
-  const isCash = sym === 'CASH';
-  document.getElementById('roth-edit-title').textContent = isCash ? 'Edit Cash Balance' : 'Edit ' + sym;
-  document.getElementById('roth-edit-shares-label').textContent = isCash ? 'Amount ($)' : 'Shares';
-  document.getElementById('roth-edit-shares').value = pos.shares;
-  document.getElementById('roth-edit-cost').value = isCash ? '' : pos.avgCost;
-  document.getElementById('roth-edit-cost-group').style.display = isCash ? 'none' : '';
-  document.getElementById('roth-edit-modal').classList.add('open');
-}
-
-function rothCloseModal() { document.getElementById('roth-edit-modal').classList.remove('open'); rothEditingSym = null; }
-
-function rothSavePosition() {
-  if (!rothEditingSym) return;
-  const shares = parseFloat(document.getElementById('roth-edit-shares').value);
-  if (isNaN(shares) || shares <= 0) return;
-  if (rothEditingSym === 'CASH') {
-    rothPortfolio['CASH'] = { shares, avgCost: 1 };
-  } else {
-    const cost = parseFloat(document.getElementById('roth-edit-cost').value);
-    if (isNaN(cost) || cost <= 0) return;
-    rothPortfolio[rothEditingSym] = { shares, avgCost: cost };
-  }
-  save(); rothCloseModal(); renderRoth();
-}
-
-function rothRemovePosition() {
-  if (!rothEditingSym) return;
-  delete rothPortfolio[rothEditingSym];
-  save(); rothCloseModal(); renderRoth();
 }
 
 // ═══ LIVE CHART ═══
@@ -1302,7 +988,7 @@ async function fetchQuote(sym) {
     const d = await r.json();
     if (d && d.c) {
       quotes[sym] = d;
-      renderPortfolio(); renderRoth(); renderMarket();
+      renderPortfolio(); renderMarket();
     }  } catch (e) { console.error('fetchQuote', sym, e); }
 }
 
@@ -1329,11 +1015,7 @@ async function fetchPrevClose(sym) {
 }
 
 async function fetchAllPrevClose() {
-  const syms = [...new Set([
-    ...Object.keys(portfolio).filter(s => s !== 'CASH'),
-    ...Object.keys(rothPortfolio).filter(s => s !== 'CASH')
-  ])];
-  for (const s of syms) await fetchPrevClose(s);
+  for (const s of Object.keys(portfolio).filter(s => s !== 'CASH')) await fetchPrevClose(s);
 }
 
 async function fetchYTD(sym) {
@@ -1422,7 +1104,7 @@ function connect() {
           if (!quotes[s]) quotes[s] = { c: t.p, pc: t.p, o: t.p, h: t.p, l: t.p };
           else quotes[s].c = t.p;
         });
-        renderPortfolio(); renderRoth(); renderMarket();
+        renderPortfolio(); renderMarket();
       }
     };
     ws.onerror = () => { setBadge('poll'); scheduleNextPoll(); };
@@ -1444,15 +1126,10 @@ document.getElementById('pos-shares').addEventListener('keydown', e => { if (e.k
 document.getElementById('pos-cost').addEventListener('keydown', e => { if (e.key === 'Enter') addPosition(); });
 document.getElementById('watch-sym').addEventListener('keydown', e => { if (e.key === 'Enter') addWatchSymbol(); });
 document.getElementById('edit-modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
-document.getElementById('roth-sym').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('roth-shares').focus(); });
-document.getElementById('roth-shares').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('roth-cost').focus(); });
-document.getElementById('roth-cost').addEventListener('keydown', e => { if (e.key === 'Enter') rothAddPosition(); });
-document.getElementById('roth-edit-modal').addEventListener('click', function(e) { if (e.target === this) rothCloseModal(); });
 
 // ═══ INIT ═══
 if (apiKey) document.getElementById('api-key').value = apiKey;
 renderPortfolio();
-renderRoth();
 renderMarket();
 renderChips();
 if (apiKey) connect();
