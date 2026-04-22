@@ -208,14 +208,32 @@ footer a{color:var(--text2)}
 </div>
 
 
+<div class="topbar">
   <div class="topbar-left">
     <span class="logo">MKTTRACKER</span>
     <span class="badge" id="status-badge">disconnected</span>
   </div>
   <div class="topbar-right">
-    <input type="text" class="key-input" id="api-key" placeholder="Finnhub API key…" />
-    <button class="btn primary" onclick="connect()">Connect</button>
-    <button class="btn danger" onclick="disconnect()">Disconnect</button>
+    <button class="btn" onclick="showKeyModal()" style="font-size:11px;padding:5px 12px">API Key</button>
+    <button class="btn danger" onclick="disconnect()" style="font-size:11px;padding:5px 12px">Disconnect</button>
+  </div>
+</div>
+
+<!-- Hidden API key input (still used by connect()) -->
+<input type="text" id="api-key" style="display:none" />
+
+<!-- API key modal -->
+<div class="modal-bg" id="key-modal">
+  <div class="modal" style="width:360px">
+    <h3>Finnhub API Key</h3>
+    <div class="form-group" style="margin-top:14px;margin-bottom:0">
+      <label>API Key</label>
+      <input type="text" id="key-modal-input" placeholder="Paste your Finnhub key…" style="width:100%;font-family:'Space Mono',monospace;font-size:12px" />
+    </div>
+    <div class="modal-btns" style="margin-top:16px">
+      <button class="btn" onclick="closeKeyModal()">Cancel</button>
+      <button class="btn primary" onclick="connectFromModal()">Connect</button>
+    </div>
   </div>
 </div>
 
@@ -1359,6 +1377,21 @@ function scheduleNextPoll() {
   }
 }
 
+function showKeyModal() {
+  const el = document.getElementById('key-modal-input');
+  el.value = apiKey || '';
+  document.getElementById('key-modal').classList.add('open');
+  setTimeout(() => el.focus(), 50);
+}
+function closeKeyModal() { document.getElementById('key-modal').classList.remove('open'); }
+function connectFromModal() {
+  const val = document.getElementById('key-modal-input').value.trim();
+  if (!val) return;
+  document.getElementById('api-key').value = val;
+  closeKeyModal();
+  connect();
+}
+
 function connect() {
   apiKey = document.getElementById('api-key').value.trim();
   if (!apiKey) { alert('Paste your Finnhub API key.'); return; }
@@ -1419,6 +1452,8 @@ document.getElementById('r-pos-sym').addEventListener('keydown', e => { if (e.ke
 document.getElementById('r-pos-shares').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('r-pos-cost').focus(); });
 document.getElementById('r-pos-cost').addEventListener('keydown', e => { if (e.key === 'Enter') rAddPosition(); });
 document.getElementById('r-edit-modal').addEventListener('click', function(e) { if (e.target === this) rCloseModal(); });
+
+document.getElementById('key-modal-input').addEventListener('keydown', e => { if (e.key === 'Enter') connectFromModal(); });
 
 // ═══ INIT ═══
 if (apiKey) document.getElementById('api-key').value = apiKey;
