@@ -498,18 +498,6 @@ const NAMES = {
   PLTR:'Palantir',COIN:'Coinbase',SOFI:'SoFi',RKLB:'Rocket Lab',
   BAC:'Bank of America',WMT:'Walmart',COST:'Costco',SBUX:'Starbucks'
 };
-const SECTORS = {
-  AAPL:'Technology',MSFT:'Technology',GOOGL:'Technology',NVDA:'Technology',
-  AMD:'Technology',INTC:'Technology',TSM:'Technology',ASML:'Technology',
-  ORCL:'Technology',PLTR:'Technology',IONQ:'Technology',
-  TSLA:'Consumer Disc.',AMZN:'Consumer Disc.',DIS:'Consumer Disc.',SBUX:'Consumer Disc.',
-  META:'Communication',NFLX:'Communication',
-  JPM:'Financials',GS:'Financials',V:'Financials',MA:'Financials',
-  BAC:'Financials',COIN:'Financials',SOFI:'Financials',
-  LMT:'Industrials',RKLB:'Industrials',
-  WMT:'Consumer Staples',COST:'Consumer Staples',
-  SPY:'ETF',QQQ:'ETF'
-};
 const PALETTE = ['#378ADD','#1D9E75','#BA7517','#D4537E','#534AB7','#639922','#185FA5','#3B6D11','#993556','#854F0B','#0F6E56','#993C1D','#7F77DD','#5F5E5A'];
 
 // ═══ FORMATTERS ═══
@@ -985,7 +973,7 @@ function renderBreakdown() {
     const gl = mktVal - cost;
     const glPct = (gl / cost) * 100;
     totalVal += mktVal;
-    return { sym, mktVal, cost, gl, glPct, sector: sectorCache[sym] || SECTORS[sym] || 'Other' };
+    return { sym, mktVal, cost, gl, glPct, sector: sectorCache[sym] || 'Other' };
   });
   if (cashAmt > 0) totalVal += cashAmt;
   posData.forEach(p => { p.weight = (p.mktVal / totalVal) * 100; });
@@ -1355,14 +1343,11 @@ const sectorCache = {}; // sym -> sector string
 
 async function fetchSector(sym) {
   if (!apiKey || sym === 'CASH' || sectorCache[sym]) return;
-  // If already in hardcoded map, no need to fetch
-  if (SECTORS[sym]) { sectorCache[sym] = SECTORS[sym]; return; }
   try {
     const r = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${sym}&token=${apiKey}`);
     const d = await r.json();
     if (d && d.finnhubIndustry) {
       sectorCache[sym] = d.finnhubIndustry;
-      // Re-render breakdown if it's visible so sector bars update
       if (document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
     }
   } catch (e) { console.error('fetchSector', sym, e); }
