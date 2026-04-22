@@ -531,13 +531,70 @@ function setSummary(val, cost, gl, glPct, dayGL, dayPct) {
 }
 
 // ═══ LIVE CHART ═══
-function pushChartPoint(val) {
-  const now = new Date();
+function pushChartPoint(val, t = null, seeded = false) {
+  const now = t || new Date();
   const last = portHistory[portHistory.length - 1];
-  if (last && Math.abs(last.v - val) < 0.01 && (now - last.t) < 5000) return;
+  if (!seeded && last && Math.abs(last.v - val) < 0.01 && (now - last.t) < 5000) return;
   portHistory.push({ t: now, v: val });
   if (portHistory.length > 400) portHistory.shift();
   renderChart();
+}
+
+// Backfill chart from 9:30 AM ET using 1-min candles
+async function backfillChart() {
+  const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
+  if (!stockSyms.length || !apiKey) return;
+
+  // Compute market open unix timestamp (9:30 AM ET, DST-aware)
+  const now = new Date();
+  const jan = new Date(now.getFullYear(), 0, 1).getTimezoneOffset();
+  const jul = new Date(now.getFullYear(), 6, 1).getTimezoneOffset();
+  const etOffset = Math.min(jan, jul) !== jan ? 4 : 5; // DST: UTC-4 summer, UTC-5 winter
+  const todayUTCMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const openUnix = Math.floor(todayUTCMidnight / 1000) + (9 * 3600 + 30 * 60) + etOffset * 3600;
+  const nowUnix  = Math.floor(Date.now() / 1000);
+  if (nowUnix < openUnix) return; // market hasn't opened yet
+
+  // Fetch 1-min candles for all positions in parallel
+  const candleMap = {};
+  await Promise.all(stockSyms.map(async sym => {
+    try {
+      const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=1&from=${openUnix}&to=${nowUnix}&token=${apiKey}`);
+      const d = await r.json();
+      if (d && d.s === 'ok' && d.t && d.c) {
+        candleMap[sym] = {};
+        d.t.forEach((t, i) => { candleMap[sym][t] = d.c[i]; });
+      }
+    } catch (e) { console.error('backfill candle', sym, e); }
+  }));
+
+  if (!Object.keys(candleMap).length) return;
+
+  // Build unified sorted minute timeline
+  const allTimes = [...new Set(
+    Object.values(candleMap).flatMap(m => Object.keys(m).map(Number))
+  )].sort((a, b) => a - b);
+
+  // For each minute, compute portfolio P&L vs prev close, carry-forward last known price
+  const lastKnown = {};
+  stockSyms.forEach(sym => { lastKnown[sym] = prevClose[sym] ?? quotes[sym]?.pc ?? null; });
+
+  portHistory.length = 0; // clear any existing points
+  allTimes.forEach(t => {
+    let dayGL = 0, hasAny = false;
+    stockSyms.forEach(sym => {
+      const pc = prevClose[sym] ?? quotes[sym]?.pc;
+      if (pc == null) return;
+      if (candleMap[sym]?.[t] != null) lastKnown[sym] = candleMap[sym][t];
+      if (lastKnown[sym] == null) return;
+      dayGL += (lastKnown[sym] - pc) * portfolio[sym].shares;
+      hasAny = true;
+    });
+    if (hasAny) pushChartPoint(dayGL, new Date(t * 1000), true);
+  });
+
+  const count = allTimes.length;
+  document.getElementById('chart-sub').textContent = `Market open · ${count} min loaded`;
 }
 
 function renderChart() {
@@ -993,7 +1050,7 @@ function connect() {
   setBadge('poll');
   fetchAll().then(() => {
     scheduleNextPoll();
-    fetchAllPrevClose();
+    fetchAllPrevClose().then(() => backfillChart());
   });
 
   if (ws) { ws.close(); ws = null; }
