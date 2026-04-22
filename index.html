@@ -169,6 +169,16 @@ tbody td:first-child{text-align:left}
 .dn{color:var(--red-text)}
 .flat{color:var(--text2)}
 
+/* heatmap */
+.heatmap-sector{margin-bottom:12px}
+.sector-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.sector-tiles{display:flex;flex-wrap:wrap;gap:4px}
+.htile{border-radius:var(--r-md);padding:10px 12px;cursor:default;transition:opacity .15s;min-width:80px;flex:1;position:relative;overflow:hidden}
+.htile:hover{opacity:.85}
+.htile .ht-sym{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;line-height:1;margin-bottom:4px}
+.htile .ht-pct{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;line-height:1}
+.htile .ht-price{font-size:10px;margin-top:3px;opacity:.75}
+
 footer{text-align:center;font-size:11px;color:var(--text3);padding:2rem 0 1.5rem}
 footer a{color:var(--text2)}
 </style>
@@ -283,8 +293,22 @@ footer a{color:var(--text2)}
 
   <!-- MARKET -->
   <div id="view-market" style="display:none">
-    <div class="market-grid" id="market-grid"></div>
-    <div class="panel">
+
+    <!-- Legend + controls -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;font-weight:500;color:var(--text2)">Sector Heatmap <span style="font-weight:400;color:var(--text3)">— size = market weight · color = day change</span></div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text3)">
+        <span style="background:#a32d2d;color:#f09595;padding:2px 8px;border-radius:4px;font-weight:600">−3%+</span>
+        <span style="background:#c94040;color:#fbb;padding:2px 8px;border-radius:4px;font-weight:600">−2%</span>
+        <span style="background:#3a3a38;color:var(--text3);padding:2px 8px;border-radius:4px;font-weight:600">0%</span>
+        <span style="background:#156b52;color:#5dcaa5;padding:2px 8px;border-radius:4px;font-weight:600">+2%</span>
+        <span style="background:#0d4f3b;color:#3dba94;padding:2px 8px;border-radius:4px;font-weight:600">+3%+</span>
+      </div>
+    </div>
+
+    <div id="heatmap-wrap"></div>
+
+    <div class="panel" style="margin-top:1.25rem">
       <div class="panel-title">Watchlist</div>
       <div class="chips" id="watchlist-chips"></div>
       <div class="form-row">
@@ -361,7 +385,8 @@ function save() {
 }
 
 function allSyms() {
-  return [...new Set([...Object.keys(portfolio).filter(s => s !== 'CASH'), ...watchlist])];
+  const heatmapSyms = Object.values(HEATMAP_SECTORS).flat();
+  return [...new Set([...Object.keys(portfolio).filter(s => s !== 'CASH'), ...watchlist, ...heatmapSyms])];
 }
 
 function setBadge(s) {
@@ -384,6 +409,7 @@ function showTab(tab) {
     document.getElementById('tab-' + t).className = 'tab' + (t === tab ? ' active' : '');
   });
   if (tab === 'breakdown') renderBreakdown();
+  if (tab === 'market') renderMarket();
 }
 
 function sortBy(col) {
@@ -701,21 +727,89 @@ function renderBreakdown() {
   }).join('');
 }
 
-// ═══ MARKET TAB ═══
+// ═══ MARKET HEATMAP ═══
+
+// Map watchlist symbols to sectors for grouping
+const HEATMAP_SECTORS = {
+  'Technology':      ['AAPL','MSFT','NVDA','GOOGL','AMD','INTC','TSM','ASML','ORCL','PLTR','IONQ','META'],
+  'Consumer Disc.':  ['TSLA','AMZN','DIS','SBUX','NFLX'],
+  'Financials':      ['JPM','GS','V','MA','BAC','COIN','SOFI'],
+  'Industrials':     ['LMT','RKLB'],
+  'Consumer Staples':['WMT','COST'],
+  'ETFs':            ['SPY','QQQ'],
+};
+
+// Returns background color based on day % change
+function heatColor(pct) {
+  if (pct == null) return { bg: 'rgba(160,157,148,0.12)', text: 'var(--text3)' };
+  if (pct >=  3)   return { bg: '#0d4f3b', text: '#3dba94' };
+  if (pct >=  2)   return { bg: '#156b52', text: '#5dcaa5' };
+  if (pct >=  1)   return { bg: '#1a9470', text: '#c5f0e0' };
+  if (pct >=  0.2) return { bg: '#1d7a5f', text: '#b8ead8' };
+  if (pct >= -0.2) return { bg: 'rgba(160,157,148,0.15)', text: 'var(--text2)' };
+  if (pct >= -1)   return { bg: '#7a2e2e', text: '#f09595' };
+  if (pct >= -2)   return { bg: '#c94040', text: '#fcc' };
+  if (pct >= -3)   return { bg: '#a32d2d', text: '#faa' };
+  return             { bg: '#7a1e1e', text: '#ff9999' };
+}
+
 function renderMarket() {
-  const grid = document.getElementById('market-grid');
-  grid.innerHTML = '';
-  watchlist.forEach(sym => {
-    const q = quotes[sym];
-    const pc = prevClose[sym] ?? q?.pc;
-    const pct = q && pc ? ((q.c - pc) / pc) * 100 : null;
-    const d = dir(pct);
-    const card = document.createElement('div');
-    card.className = 'mcard' + (activeMarketSym === sym ? ' active' : '');
-    card.innerHTML = `<div class="mc-sym">${sym}</div><div class="mc-price ${d}">${q ? f$(q.c) : '—'}</div><div class="mc-change ${d}">${pct != null ? arr(d) + ' ' + fp(pct) : '—'}</div><div class="mc-name">${NAMES[sym] || sym}</div>`;
-    card.onclick = () => { activeMarketSym = sym; renderMarket(); renderChips(); };
-    grid.appendChild(card);
+  const wrap = document.getElementById('heatmap-wrap');
+  wrap.innerHTML = '';
+
+  // Gather all symbols: sector map + any watchlist extras
+  const sectorSyms = new Set(Object.values(HEATMAP_SECTORS).flat());
+  const extras = watchlist.filter(s => !sectorSyms.has(s));
+
+  const groups = { ...HEATMAP_SECTORS };
+  if (extras.length) groups['Other'] = extras;
+
+  // Approximate relative market caps for tile sizing (rough weights, updated periodically)
+  const WEIGHTS = {
+    AAPL:3000,MSFT:2800,NVDA:2200,GOOGL:1800,AMZN:1700,META:1200,TSLA:700,
+    ASML:350,TSM:600,V:480,MA:380,JPM:450,NFLX:250,AMD:220,ORCL:300,
+    LMT:110,COST:260,WMT:380,GS:140,BAC:260,DIS:170,SBUX:90,
+    INTC:100,PLTR:90,SOFI:20,IONQ:10,RKLB:15,COIN:60,
+    SPY:500,QQQ:200,
+  };
+  const DEFAULT_WEIGHT = 50;
+
+  Object.entries(groups).forEach(([sector, syms]) => {
+    const validSyms = syms.filter(s => watchlist.includes(s) || Object.values(HEATMAP_SECTORS).flat().includes(s));
+    // Only show sectors that have at least one symbol in watchlist, or all symbols for built-in sectors
+    const showSyms = syms;
+    if (!showSyms.length) return;
+
+    const sectorEl = document.createElement('div');
+    sectorEl.className = 'heatmap-sector';
+    sectorEl.innerHTML = `<div class="sector-label">${sector}</div><div class="sector-tiles" id="tiles-${sector.replace(/[^a-z]/gi,'_')}"></div>`;
+    wrap.appendChild(sectorEl);
+
+    const tilesEl = sectorEl.querySelector('.sector-tiles');
+    const totalW = showSyms.reduce((s, sym) => s + (WEIGHTS[sym] || DEFAULT_WEIGHT), 0);
+
+    showSyms.forEach(sym => {
+      const q = quotes[sym];
+      const pc = prevClose[sym] ?? q?.pc;
+      const pct = (q && pc) ? ((q.c - pc) / pc) * 100 : null;
+      const { bg, text } = heatColor(pct);
+      const w = WEIGHTS[sym] || DEFAULT_WEIGHT;
+      const flexGrow = Math.max(1, Math.round((w / totalW) * 20));
+
+      const tile = document.createElement('div');
+      tile.className = 'htile';
+      tile.style.background = bg;
+      tile.style.color = text;
+      tile.style.flexGrow = flexGrow;
+      tile.innerHTML = `
+        <div class="ht-sym">${sym}</div>
+        <div class="ht-pct">${pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : '—'}</div>
+        <div class="ht-price">${q ? f$(q.c) : '—'}</div>`;
+      tilesEl.appendChild(tile);
+    });
   });
+
+  renderChips();
 }
 
 function renderChips() {
@@ -825,8 +919,7 @@ async function fetchQuote(sym) {
     if (d && d.c) {
       quotes[sym] = d;
       renderPortfolio(); renderMarket();
-    }
-  } catch (e) { console.error('fetchQuote', sym, e); }
+    }  } catch (e) { console.error('fetchQuote', sym, e); }
 }
 
 async function fetchAll() {
