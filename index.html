@@ -409,7 +409,7 @@ footer a{color:var(--text2)}
 let apiKey = localStorage.getItem('finnhub_key') || '';
 let ws = null, refreshInterval = null, editingSym = null, activeMarketSym = null;
 let portChart = null, donutChart = null;
-let sortCol = 'sym', sortDir = 1;
+let sortCol = 'mktVal', sortDir = -1;
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
 let watchlist = JSON.parse(localStorage.getItem('mkt_watchlist') || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
@@ -417,7 +417,7 @@ let rPortfolio = JSON.parse(localStorage.getItem('roth_portfolio') || '{}');
 let quotes = {}, prevClose = {}, ytdClose = {};
 const portHistory = [];
 const rHistory = [];
-let rChart = null, rSortColV = 'sym', rSortDirV = 1, rEditingSym = null;
+let rChart = null, rSortColV = 'mktVal', rSortDirV = -1, rEditingSym = null;
 
 const NAMES = {
   AAPL:'Apple',MSFT:'Microsoft',GOOGL:'Alphabet',NVDA:'NVIDIA',TSLA:'Tesla',
