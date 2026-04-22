@@ -186,7 +186,28 @@ footer a{color:var(--text2)}
 </head>
 <body>
 
-<div class="topbar">
+<!-- Login overlay -->
+<div id="login-overlay" style="position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:.5px solid var(--border-md);border-radius:var(--r-xl);padding:2.5rem;width:320px;max-width:90vw">
+    <div style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;letter-spacing:.5px;margin-bottom:1.75rem;text-align:center">MKTTRACKER</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--text3);font-weight:500">Username</label>
+        <input type="text" id="login-user" placeholder="Username" autocomplete="username"
+          style="font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;border:.5px solid var(--border-md);border-radius:var(--r-md);background:var(--surface2);color:var(--text);outline:none" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--text3);font-weight:500">Password</label>
+        <input type="password" id="login-pass" placeholder="Password" autocomplete="current-password"
+          style="font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;border:.5px solid var(--border-md);border-radius:var(--r-md);background:var(--surface2);color:var(--text);outline:none" />
+      </div>
+      <div id="login-err" style="font-size:12px;color:var(--red-text);min-height:16px;margin-top:2px"></div>
+      <button onclick="doLogin()" style="font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:10px;border-radius:var(--r-md);border:none;background:var(--text);color:var(--bg);cursor:pointer;margin-top:4px">Sign In</button>
+    </div>
+  </div>
+</div>
+
+
   <div class="topbar-left">
     <span class="logo">MKTTRACKER</span>
     <span class="badge" id="status-badge">disconnected</span>
@@ -405,6 +426,37 @@ footer a{color:var(--text2)}
 <footer>Powered by <a href="https://finnhub.io" target="_blank">Finnhub</a> &mdash; prices may be delayed up to 15s on free tier.</footer>
 
 <script>
+// ═══ LOGIN ═══
+(function() {
+  if (sessionStorage.getItem('mkt_auth') === '1') {
+    document.getElementById('login-overlay').style.display = 'none';
+  }
+})();
+
+function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  if (u === 'admin' && p === 'password') {
+    sessionStorage.setItem('mkt_auth', '1');
+    document.getElementById('login-overlay').style.display = 'none';
+  } else {
+    document.getElementById('login-err').textContent = 'Incorrect username or password.';
+    document.getElementById('login-pass').value = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const overlay = document.getElementById('login-overlay');
+  if (overlay.style.display !== 'none') {
+    document.getElementById('login-user').focus();
+  }
+  ['login-user','login-pass'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+  });
+});
+
 // ═══ STATE ═══
 let apiKey = localStorage.getItem('finnhub_key') || '';
 let ws = null, refreshInterval = null, editingSym = null, activeMarketSym = null;
