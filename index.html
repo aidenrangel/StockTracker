@@ -819,7 +819,7 @@ function rAddPosition(){
   document.getElementById('r-pos-sym').value=''; document.getElementById('r-pos-shares').value=''; document.getElementById('r-pos-cost').value='';
   setMsg('r-pos-msg',`Added ${sym} — ${shares} shares @ ${f$(cost)}`,'ok');
   renderRoth();
-  if(apiKey){fetchQuote(sym);fetchPrevClose(sym);fetchYTD(sym);}
+  if(apiKey){fetchQuote(sym);fetchPrevClose(sym);fetchYTD(sym);fetchSector(sym);}
 }
 
 function rOpenEdit(sym){
@@ -985,7 +985,7 @@ function renderBreakdown() {
     const gl = mktVal - cost;
     const glPct = (gl / cost) * 100;
     totalVal += mktVal;
-    return { sym, mktVal, cost, gl, glPct, sector: SECTORS[sym] || 'Other' };
+    return { sym, mktVal, cost, gl, glPct, sector: sectorCache[sym] || SECTORS[sym] || 'Other' };
   });
   if (cashAmt > 0) totalVal += cashAmt;
   posData.forEach(p => { p.weight = (p.mktVal / totalVal) * 100; });
@@ -1233,6 +1233,7 @@ function addPosition() {
     fetchQuote(sym);
     fetchPrevClose(sym);
     fetchYTD(sym);
+    fetchSector(sym);
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subscribe', symbol: sym }));
   }
 }
@@ -1345,7 +1346,31 @@ async function fetchYTD(sym) {
 }
 
 async function fetchAllYTD() {
-  for (const s of Object.keys(portfolio).filter(s => s !== 'CASH')) await fetchYTD(s);
+  const syms = [...new Set([...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH'))];
+  for (const s of syms) await fetchYTD(s);
+}
+
+// ─── Dynamic sector lookup via Finnhub profile ─────────────────────────────
+const sectorCache = {}; // sym -> sector string
+
+async function fetchSector(sym) {
+  if (!apiKey || sym === 'CASH' || sectorCache[sym]) return;
+  // If already in hardcoded map, no need to fetch
+  if (SECTORS[sym]) { sectorCache[sym] = SECTORS[sym]; return; }
+  try {
+    const r = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${sym}&token=${apiKey}`);
+    const d = await r.json();
+    if (d && d.finnhubIndustry) {
+      sectorCache[sym] = d.finnhubIndustry;
+      // Re-render breakdown if it's visible so sector bars update
+      if (document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
+    }
+  } catch (e) { console.error('fetchSector', sym, e); }
+}
+
+async function fetchAllSectors() {
+  const syms = [...new Set([...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH'))];
+  for (const s of syms) await fetchSector(s);
 }
 
 // ═══ CONNECT ═══
@@ -1404,6 +1429,7 @@ function connect() {
   fetchAll().then(async () => {
     await fetchAllPrevClose();
     await fetchAllYTD();
+    await fetchAllSectors();
     await backfillChart();
     if (open) scheduleNextPoll();
   });
