@@ -239,6 +239,7 @@ footer a{color:var(--text2)}
           <th onclick="sortBy('mktVal')">Mkt Value</th>
           <th onclick="sortBy('gl')">Gain / Loss</th>
           <th onclick="sortBy('glPct')">Return</th>
+          <th onclick="sortBy('ytd')">YTD</th>
           <th></th>
         </tr></thead>
         <tbody id="port-tbody"></tbody>
@@ -345,7 +346,7 @@ let sortCol = 'sym', sortDir = 1;
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
 let watchlist = JSON.parse(localStorage.getItem('mkt_watchlist') || '["AAPL","MSFT","GOOGL","NVDA","TSLA"]');
-let quotes = {}, prevClose = {};
+let quotes = {}, prevClose = {}, ytdClose = {};
 const portHistory = []; // [{t, v}]
 
 const NAMES = {
@@ -421,7 +422,7 @@ function sortBy(col) {
 }
 
 function updateSortHeaders() {
-  const cols = ['sym','price','day','shares','avgCost','mktVal','gl','glPct'];
+  const cols = ['sym','price','day','shares','avgCost','mktVal','gl','glPct','ytd'];
   document.querySelectorAll('#port-thead th').forEach((th, i) => {
     th.classList.remove('sort-asc', 'sort-desc');
     if (cols[i] === sortCol) th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
@@ -435,7 +436,7 @@ function renderPortfolio() {
   const syms = Object.keys(portfolio);
 
   if (!syms.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px">No positions yet — add one below.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px">No positions yet — add one below.</td></tr>`;
     setSummary(null, null, null, null, null, null);
     updateSortHeaders();
     return;
@@ -473,7 +474,7 @@ function renderPortfolio() {
       case 'avgCost': return r.pos.avgCost;
       case 'mktVal': return r.mktVal ?? -Infinity;
       case 'gl': return r.gl ?? -Infinity;
-      case 'glPct': return r.glPct ?? -Infinity;
+      case 'ytd':    return ytdClose[r.sym] && r.price != null ? ((r.price - ytdClose[r.sym]) / ytdClose[r.sym]) * 100 : -Infinity;
       default: return 0;
     }
   };
@@ -494,8 +495,12 @@ function renderPortfolio() {
         <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
         <td class="td-mono">${f$(pos.shares)}</td>
         <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
+        <td style="color:var(--text3)">—</td>
         <td><button class="btn sm" onclick="openEdit('${sym}')">Edit</button></td>`;
     } else {
+      const yc = ytdClose[sym];
+      const ytdPct = yc && price != null ? ((price - yc) / yc) * 100 : null;
+      const ytdD = dir(ytdPct);
       tr.innerHTML = `
         <td><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym] || ''}</div></td>
         <td class="td-mono">${price != null ? f$(price) : '—'}</td>
@@ -505,6 +510,7 @@ function renderPortfolio() {
         <td class="td-mono">${mktVal != null ? f$(mktVal) : '—'}</td>
         <td class="td-mono ${glD}">${gl != null ? fs$(gl) : '—'}</td>
         <td>${glPct != null ? `<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
+        <td>${ytdPct != null ? `<span class="pill ${ytdD}">${arr(ytdD)} ${fp(ytdPct)}</span>` : '<span style="color:var(--text3);font-size:11px">…</span>'}</td>
         <td><button class="btn sm" onclick="openEdit('${sym}')">Edit</button></td>`;
     }
     tbody.appendChild(tr);
@@ -543,6 +549,7 @@ function pushChartPoint(val, t = null, seeded = false) {
 // Backfill chart from 9:30 AM ET using 1-min candles
 async function backfillChart() {
   const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
+  console.log('backfillChart: symbols=', stockSyms, 'apiKey=', !!apiKey);
   if (!stockSyms.length || !apiKey) return;
 
   // Compute market open unix timestamp (9:30 AM ET, DST-aware)
@@ -553,7 +560,8 @@ async function backfillChart() {
   const todayUTCMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const openUnix = Math.floor(todayUTCMidnight / 1000) + (9 * 3600 + 30 * 60) + etOffset * 3600;
   const nowUnix  = Math.floor(Date.now() / 1000);
-  if (nowUnix < openUnix) return; // market hasn't opened yet
+  console.log('backfillChart: openUnix=', openUnix, 'nowUnix=', nowUnix, 'diff mins=', Math.round((nowUnix-openUnix)/60));
+  if (nowUnix < openUnix) { console.log('backfillChart: market not open yet'); return; }
 
   // Fetch 1-min candles for all positions in parallel
   const candleMap = {};
@@ -561,6 +569,7 @@ async function backfillChart() {
     try {
       const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=1&from=${openUnix}&to=${nowUnix}&token=${apiKey}`);
       const d = await r.json();
+      console.log('backfillChart candle', sym, 's=', d?.s, 'points=', d?.t?.length);
       if (d && d.s === 'ok' && d.t && d.c) {
         candleMap[sym] = {};
         d.t.forEach((t, i) => { candleMap[sym][t] = d.c[i]; });
@@ -568,7 +577,8 @@ async function backfillChart() {
     } catch (e) { console.error('backfill candle', sym, e); }
   }));
 
-  if (!Object.keys(candleMap).length) return;
+  console.log('backfillChart: candleMap keys=', Object.keys(candleMap));
+  if (!Object.keys(candleMap).length) { console.log('backfillChart: no candle data returned'); return; }
 
   // Build unified sorted minute timeline
   const allTimes = [...new Set(
@@ -916,6 +926,7 @@ function addPosition() {
   if (apiKey) {
     fetchQuote(sym);
     fetchPrevClose(sym);
+    fetchYTD(sym);
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subscribe', symbol: sym }));
   }
 }
@@ -1007,6 +1018,27 @@ async function fetchAllPrevClose() {
   for (const s of Object.keys(portfolio).filter(s => s !== 'CASH')) await fetchPrevClose(s);
 }
 
+async function fetchYTD(sym) {
+  if (!apiKey || sym === 'CASH' || ytdClose[sym] != null) return;
+  try {
+    const now = new Date();
+    // Jan 1 of current year → first trading day close
+    const yearStart = Math.floor(Date.UTC(now.getUTCFullYear(), 0, 1) / 1000);
+    const jan31    = Math.floor(Date.UTC(now.getUTCFullYear(), 0, 31) / 1000);
+    const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=D&from=${yearStart}&to=${jan31}&token=${apiKey}`);
+    const d = await r.json();
+    if (d && d.s === 'ok' && d.c && d.c.length >= 1) {
+      // First candle of the year = the last close of previous year (what YTD is measured from)
+      ytdClose[sym] = d.c[0];
+      renderPortfolio();
+    }
+  } catch (e) { console.error('fetchYTD', sym, e); }
+}
+
+async function fetchAllYTD() {
+  for (const s of Object.keys(portfolio).filter(s => s !== 'CASH')) await fetchYTD(s);
+}
+
 // ═══ CONNECT ═══
 function isMarketOpen() {
   const et = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
@@ -1041,17 +1073,18 @@ function connect() {
   if (!apiKey) { alert('Paste your Finnhub API key.'); return; }
   localStorage.setItem('finnhub_key', apiKey);
 
-  if (!isMarketOpen()) {
-    setBadge('closed');
-    fetchAll().then(() => fetchAllPrevClose());
-    return;
-  }
+  const open = isMarketOpen();
+  setBadge(open ? 'poll' : 'closed');
 
-  setBadge('poll');
-  fetchAll().then(() => {
-    scheduleNextPoll();
-    fetchAllPrevClose().then(() => backfillChart());
+  // Always: fetch quotes → fetch prev closes → backfill chart
+  fetchAll().then(async () => {
+    await fetchAllPrevClose();
+    await fetchAllYTD();
+    await backfillChart();
+    if (open) scheduleNextPoll();
   });
+
+  if (!open) return;
 
   if (ws) { ws.close(); ws = null; }
   try {
