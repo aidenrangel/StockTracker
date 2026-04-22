@@ -37,6 +37,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .topbar-right{display:flex;gap:8px;align-items:center}
 .badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;background:var(--surface2);color:var(--text3);display:flex;align-items:center;gap:5px}
 .badge.live{background:var(--green-bg);color:var(--green-text)}
+.badge.closed{background:var(--amber-bg);color:var(--amber-text)}
 .pulse{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.6s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.75)}}
 .key-input{font-family:'Space Mono',monospace;font-size:11px;padding:6px 10px;border:.5px solid var(--border-md);border-radius:var(--r-md);background:var(--surface2);color:var(--text);width:210px}
@@ -391,8 +392,9 @@ function allSyms() {
 
 function setBadge(s) {
   const b = document.getElementById('status-badge');
-  if (s === 'live') { b.className = 'badge live'; b.innerHTML = '<span class="pulse"></span>live'; }
-  else if (s === 'poll') { b.className = 'badge live'; b.innerHTML = '<span class="pulse"></span>polling'; }
+  if (s === 'live')   { b.className = 'badge live';   b.innerHTML = '<span class="pulse"></span>live'; }
+  else if (s === 'poll')   { b.className = 'badge live';   b.innerHTML = '<span class="pulse"></span>polling'; }
+  else if (s === 'closed') { b.className = 'badge closed'; b.textContent = 'market closed'; }
   else { b.className = 'badge'; b.textContent = 'disconnected'; }
 }
 
@@ -949,15 +951,51 @@ async function fetchAllPrevClose() {
 }
 
 // ═══ CONNECT ═══
+function isMarketOpen() {
+  const et = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const d = new Date(et);
+  const day = d.getDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return false;
+  const mins = d.getHours() * 60 + d.getMinutes();
+  return mins >= 9 * 60 + 30 && mins < 16 * 60;
+}
+
+function scheduleNextPoll() {
+  if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+  if (isMarketOpen()) {
+    refreshInterval = setInterval(() => {
+      if (isMarketOpen()) {
+        fetchAll();
+      } else {
+        // Market just closed — do one final fetch then stop
+        fetchAll();
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+        setBadge('poll'); // downgrade from live
+        if (ws) { ws.close(); ws = null; }
+        document.getElementById('status-badge').title = 'Market closed';
+      }
+    }, 15000);
+  }
+}
+
 function connect() {
   apiKey = document.getElementById('api-key').value.trim();
   if (!apiKey) { alert('Paste your Finnhub API key.'); return; }
   localStorage.setItem('finnhub_key', apiKey);
+
+  if (!isMarketOpen()) {
+    setBadge('closed');
+    fetchAll().then(() => fetchAllPrevClose());
+    return;
+  }
+
   setBadge('poll');
   fetchAll().then(() => {
-    if (!refreshInterval) refreshInterval = setInterval(fetchAll, 15000);
+    scheduleNextPoll();
     fetchAllPrevClose();
   });
+
   if (ws) { ws.close(); ws = null; }
   try {
     ws = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
@@ -977,9 +1015,9 @@ function connect() {
         renderPortfolio(); renderMarket();
       }
     };
-    ws.onerror = () => { setBadge('poll'); if (!refreshInterval) refreshInterval = setInterval(fetchAll, 15000); };
-    ws.onclose = () => { if (!refreshInterval) refreshInterval = setInterval(fetchAll, 15000); };
-  } catch (e) { setBadge('poll'); if (!refreshInterval) refreshInterval = setInterval(fetchAll, 15000); }
+    ws.onerror = () => { setBadge('poll'); scheduleNextPoll(); };
+    ws.onclose = () => { if (isMarketOpen()) scheduleNextPoll(); else setBadge('closed'); };
+  } catch (e) { setBadge('poll'); scheduleNextPoll(); }
 }
 
 function disconnect() {
