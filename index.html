@@ -52,7 +52,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .btn.danger{color:var(--red-text)}
 .btn.sm{font-size:11px;padding:4px 10px}
 .page{max-width:1000px;margin:0 auto;padding:2rem 1.5rem}
-.tabs{display:flex;gap:2px;margin-bottom:1.75rem;border-bottom:.5px solid var(--border-md)}
+.tabs{display:flex;gap:2px;margin-bottom:1.75rem;border-bottom:.5px solid var(--border-md);position:sticky;top:54px;z-index:9;background:var(--bg)}
 .tab{font-size:13px;font-weight:500;padding:8px 16px;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-.5px;transition:color .12s}
 .tab:hover{color:var(--text)}
 .tab.active{color:var(--text);border-bottom-color:var(--text)}
@@ -1175,7 +1175,7 @@ function rAddPosition(){
   document.getElementById('r-pos-sym').value=''; document.getElementById('r-pos-shares').value=''; document.getElementById('r-pos-cost').value='';
   setMsg('r-pos-msg',`Added ${sym} — ${shares} shares @ ${f$(cost)}`,'ok');
   renderRoth();
-  if(apiKey){fetchQuote(sym);fetchPrevClose(sym);fetchYTD(sym);fetchSector(sym);fetchEarnings(sym);}
+  if(apiKey){fetchQuote(sym);fetchPrevClose(sym);fetchYTD(sym);fetchSector(sym);fetchEarnings(sym);fetchInsider(sym);}
 }
 
 function rOpenEdit(sym){
@@ -1699,7 +1699,7 @@ function addPosition() {
   setMsg('pos-msg', `Added ${sym} — ${shares} shares @ ${f$(cost)}`, 'ok');
   renderPortfolio(); renderMarket(); renderChips();
   if (apiKey) {
-    fetchQuote(sym); fetchPrevClose(sym); fetchYTD(sym); fetchSector(sym); fetchEarnings(sym);
+    fetchQuote(sym); fetchPrevClose(sym); fetchYTD(sym); fetchSector(sym); fetchEarnings(sym); fetchInsider(sym);
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subscribe', symbol: sym }));
   }
 }
@@ -1990,6 +1990,78 @@ function renderEarningsFor(prefix, syms) {
   }).join('');
 }
 
+// ═══ INSIDER TRANSACTIONS ═══
+const insiderCache = {}; // sym -> array of transactions
+
+async function fetchInsider(sym) {
+  if (!apiKey || sym === 'CASH' || insiderCache[sym] !== undefined) return;
+  try {
+    const r = await fetch(`https://finnhub.io/api/v1/stock/insider-transactions?symbol=${sym}&token=${apiKey}`);
+    const d = await r.json();
+    const txns = d?.data;
+    if (Array.isArray(txns) && txns.length > 0) {
+      // Filter to last 90 days, sort newest first
+      const cutoff = Date.now() - 90 * 86400000;
+      insiderCache[sym] = txns
+        .filter(t => t.transactionDate && new Date(t.transactionDate).getTime() > cutoff)
+        .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate))
+        .slice(0, 10);
+    } else {
+      insiderCache[sym] = [];
+    }
+    renderInsiders();
+  } catch(e) { console.error('fetchInsider', sym, e); }
+}
+
+async function fetchAllInsiders(syms) {
+  for (const s of syms) await fetchInsider(s);
+}
+
+function renderInsiders() {
+  renderInsiderFor('port', Object.keys(portfolio).filter(s => s !== 'CASH'));
+  renderInsiderFor('roth', Object.keys(rPortfolio).filter(s => s !== 'CASH'));
+}
+
+function renderInsiderFor(prefix, syms) {
+  const panel = document.getElementById(prefix + '-insider-panel');
+  const body = document.getElementById(prefix + '-insider-body');
+  if (!panel || !body) return;
+
+  // Flatten all transactions across holdings, tag with sym
+  const all = [];
+  syms.forEach(sym => {
+    const txns = insiderCache[sym];
+    if (txns && txns.length) txns.forEach(t => all.push({ ...t, sym }));
+  });
+
+  all.sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
+  const rows = all.slice(0, 15);
+
+  if (!rows.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+
+  body.innerHTML = rows.map(t => {
+    const isBuy = t.change > 0;
+    const badgeBg = isBuy ? 'var(--green-bg)' : 'var(--red-bg)';
+    const badgeColor = isBuy ? 'var(--green-text)' : 'var(--red-text)';
+    const label = isBuy ? 'BUY' : 'SELL';
+    const shares = Math.abs(t.change).toLocaleString();
+    const val = t.transactionPrice && t.change
+      ? f$(Math.abs(t.change * t.transactionPrice))
+      : '';
+    const date = new Date(t.transactionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const name = t.name ? t.name.split(' ').slice(0, 2).join(' ') : 'Unknown';
+    const title = t.officerTitle ? t.officerTitle.replace(/Chief |Officer/g, '').trim() : '';
+    return `<div class="insider-row">
+      <span class="insider-sym">${t.sym}</span>
+      <span class="insider-badge" style="background:${badgeBg};color:${badgeColor}">${label}</span>
+      <span class="insider-name">${name}${title ? ` · ${title}` : ''}</span>
+      <span class="insider-val">${shares} sh${val ? ' · ' + val : ''}</span>
+      <span class="insider-date">${date}</span>
+    </div>`;
+  }).join('');
+}
+
 // ═══ NEWS ═══
 function newsSyms() {
   return [...new Set([
@@ -2143,6 +2215,7 @@ function connect() {
     await fetchAllSectors();
     const allPortSyms = [...new Set([...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH'))];
     fetchAllEarnings(allPortSyms);
+    fetchAllInsiders(allPortSyms);
     await backfillChart();
     if (open) scheduleNextPoll();
   });
