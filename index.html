@@ -2431,8 +2431,8 @@ function connect() {
   if (!apiKey && !tiingoKey) { alert('Please enter at least one API key.'); return; }
   if (apiKey) localStorage.setItem('finnhub_key', apiKey);
 
-  const open = isExtendedHours();
-  setBadge(open ? (isMarketOpen() ? 'poll' : 'poll') : 'closed');
+  const open = true;
+  setBadge('poll');
 
   // Fetch quotes → prev closes → YTD → sectors → earnings → insiders → backfill
   fetchAll().then(async () => {
@@ -2443,10 +2443,9 @@ function connect() {
     fetchAllEarnings(allPortSyms);
     fetchAllInsiders(allPortSyms);
     await backfillChart();
-    if (open) scheduleNextPoll();
+    scheduleNextPoll();
   });
 
-  if (!open) return;
 
   // Use Tiingo WebSocket if key available, else fall back to Finnhub
   if (tiingoKey) {
