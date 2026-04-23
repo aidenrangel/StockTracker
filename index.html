@@ -1250,7 +1250,8 @@ async function backfillChart() {
   await Promise.all(stockSyms.map(async sym => {
     try {
       const r = await fetch(
-        `https://api.tiingo.com/iex/${sym}/prices?startDate=${today}&resampleFreq=5min&token=${tiingoKey}`
+        `https://api.tiingo.com/iex/${sym}/prices?startDate=${today}&resampleFreq=5min&token=${tiingoKey}`,
+        { headers: { 'Authorization': `Token ${tiingoKey}` } }
       );
       const d = await r.json();
       if (Array.isArray(d) && d.length > 0) {
@@ -1786,7 +1787,9 @@ function addWatchSymbol() {
 async function fetchTiingoQuote(sym) {
   if (!tiingoKey || sym === 'CASH') return;
   try {
-    const r = await fetch(`https://api.tiingo.com/iex/${sym}?token=${tiingoKey}`);
+    const r = await fetch(`https://api.tiingo.com/iex/${sym}?token=${tiingoKey}`, {
+      headers: { 'Authorization': `Token ${tiingoKey}` }
+    });
     const arr = await r.json();
     const d = Array.isArray(arr) ? arr[0] : arr;
     if (d && d.tngoLast != null) {
