@@ -1205,6 +1205,8 @@ function pushChartPoint(val, t = null, seeded = false) {
   if (!seeded && last && Math.abs(last.v - val) < 0.01 && (now - last.t) < 5000) return;
   portHistory.push({ t: now, v: val });
   if (portHistory.length > 400) portHistory.shift();
+  // Persist to sessionStorage so chart survives page refresh
+  try { sessionStorage.setItem('port_history', JSON.stringify(portHistory.map(p => ({ t: p.t.getTime(), v: p.v })))); } catch(e) {}
   renderChart();
 }
 
@@ -1229,7 +1231,7 @@ async function backfillChart() {
   const candleMap = {};
   await Promise.all(stockSyms.map(async sym => {
     try {
-      const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=1&from=${openUnix}&to=${nowUnix}&token=${apiKey}`);
+      const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=5&from=${openUnix}&to=${nowUnix}&token=${apiKey}`);
       const d = await r.json();
       console.log('backfillChart candle', sym, 's=', d?.s, 'points=', d?.t?.length);
       if (d && d.s === 'ok' && d.t && d.c) {
@@ -2270,6 +2272,20 @@ document.getElementById('key-modal-input').addEventListener('keydown', e => { if
 
 // ═══ INIT ═══
 if (apiKey) document.getElementById('api-key').value = apiKey;
+// Restore chart history from session storage (survives page refresh)
+try {
+  const saved = sessionStorage.getItem('port_history');
+  if (saved) {
+    const pts = JSON.parse(saved);
+    const today = new Date(); today.setHours(0,0,0,0);
+    pts.forEach(p => {
+      const t = new Date(p.t);
+      if (t >= today) portHistory.push({ t, v: p.v }); // only today's data
+    });
+    if (portHistory.length > 1) renderChart();
+  }
+} catch(e) {}
+
 renderPortfolio();
 renderRoth();
 renderMarket();
