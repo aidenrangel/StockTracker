@@ -668,7 +668,7 @@ function renderPortfolio() {
     const { sym, pos, isCash, price, mktVal, gl, glPct, dayGL, dayPct } = r;
     const glD = dir(gl), dayD = dir(dayGL);
     const tr = document.createElement('tr');
-    if (!isCash) { tr.classList.add('clickable'); tr.onclick = () => showCompanyInfo(sym); }
+    if (!isCash) tr.classList.add('clickable');
     if (isCash) {
       tr.innerHTML = `
         <td><div class="td-sym" style="color:var(--text2)">CASH</div><div class="td-name">Cash balance</div></td>
@@ -683,15 +683,15 @@ function renderPortfolio() {
       const ytdPct = yc && price != null ? ((price - yc) / yc) * 100 : null;
       const ytdD = dir(ytdPct);
       tr.innerHTML = `
-        <td><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym] || ''}</div></td>
-        <td class="td-mono">${price != null ? f$(price) : '—'}</td>
-        <td>${dayPct != null ? `<span class="pill ${dayD}">${arr(dayD)} ${fp(dayPct)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
-        <td class="td-mono">${pos.shares.toLocaleString()}</td>
-        <td class="td-mono">${f$(pos.avgCost)}</td>
-        <td class="td-mono">${mktVal != null ? f$(mktVal) : '—'}</td>
-        <td class="td-mono ${glD}">${gl != null ? fs$(gl) : '—'}</td>
-        <td>${glPct != null ? `<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
-        <td>${ytdPct != null ? `<span class="pill ${ytdD}">${arr(ytdD)} ${fp(ytdPct)}</span>` : '<span style="color:var(--text3);font-size:11px">…</span>'}</td>
+        <td onclick="showCompanyInfo('${sym}')" style="cursor:pointer"><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym] || ''}</div></td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono">${price != null ? f$(price) : '—'}</td>
+        <td onclick="showCompanyInfo('${sym}')">${dayPct != null ? `<span class="pill ${dayD}">${arr(dayD)} ${fp(dayPct)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono">${pos.shares.toLocaleString()}</td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono">${f$(pos.avgCost)}</td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono">${mktVal != null ? f$(mktVal) : '—'}</td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono ${glD}">${gl != null ? fs$(gl) : '—'}</td>
+        <td onclick="showCompanyInfo('${sym}')">${glPct != null ? `<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
+        <td onclick="showCompanyInfo('${sym}')">${ytdPct != null ? `<span class="pill ${ytdD}">${arr(ytdD)} ${fp(ytdPct)}</span>` : '<span style="color:var(--text3);font-size:11px">…</span>'}</td>
         <td><button class="btn sm" onclick="event.stopPropagation();openEdit('${sym}')">Edit</button></td>`;
     }
     tbody.appendChild(tr);
@@ -769,7 +769,7 @@ function renderRoth() {
   stockRows.sort((a,b)=>{ const va=gv(a),vb=gv(b); return typeof va==='string'?va.localeCompare(vb)*rSortDirV:(va-vb)*rSortDirV; });
   [...stockRows,...cashRows].forEach(({sym,pos,isCash,price,mktVal,gl,glPct,dayGL,dayPct})=>{
     const glD=dir(gl),dayD=dir(dayGL),tr=document.createElement('tr');
-    if(!isCash){tr.classList.add('clickable');tr.onclick=()=>showCompanyInfo(sym);}
+    if(!isCash){tr.classList.add('clickable');}
     if(isCash){
       tr.innerHTML=`<td><div class="td-sym" style="color:var(--text2)">CASH</div><div class="td-name">Cash balance</div></td>
         <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
@@ -777,14 +777,15 @@ function renderRoth() {
         <td><button class="btn sm" onclick="rOpenEdit('${sym}')">Edit</button></td>`;
     } else {
       const yc=ytdClose[sym],ytdPct=yc&&price!=null?((price-yc)/yc)*100:null,ytdD=dir(ytdPct);
-      tr.innerHTML=`<td><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym]||''}</div></td>
-        <td class="td-mono">${price!=null?f$(price):'—'}</td>
-        <td>${dayPct!=null?`<span class="pill ${dayD}">${arr(dayD)} ${fp(dayPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
-        <td class="td-mono">${pos.shares.toLocaleString()}</td><td class="td-mono">${f$(pos.avgCost)}</td>
-        <td class="td-mono">${mktVal!=null?f$(mktVal):'—'}</td>
-        <td class="td-mono ${glD}">${gl!=null?fs$(gl):'—'}</td>
-        <td>${glPct!=null?`<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
-        <td>${ytdPct!=null?`<span class="pill ${ytdD}">${arr(ytdD)} ${fp(ytdPct)}</span>`:'<span style="color:var(--text3);font-size:11px">…</span>'}</td>
+      tr.innerHTML=`<td onclick="showCompanyInfo('${sym}')" style="cursor:pointer"><div class="td-sym">${sym}</div><div class="td-name">${NAMES[sym]||''}</div></td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono">${price!=null?f$(price):'—'}</td>
+        <td onclick="showCompanyInfo('${sym}')">${dayPct!=null?`<span class="pill ${dayD}">${arr(dayD)} ${fp(dayPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono">${pos.shares.toLocaleString()}</td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono">${f$(pos.avgCost)}</td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono">${mktVal!=null?f$(mktVal):'—'}</td>
+        <td onclick="showCompanyInfo('${sym}')" class="td-mono ${glD}">${gl!=null?fs$(gl):'—'}</td>
+        <td onclick="showCompanyInfo('${sym}')">${glPct!=null?`<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+        <td onclick="showCompanyInfo('${sym}')">${ytdPct!=null?`<span class="pill ${ytdD}">${arr(ytdD)} ${fp(ytdPct)}</span>`:'<span style="color:var(--text3);font-size:11px">…</span>'}</td>
         <td><button class="btn sm" onclick="event.stopPropagation();rOpenEdit('${sym}')">Edit</button></td>`;
     }
     tbody.appendChild(tr);
