@@ -1306,14 +1306,14 @@ function getDayWindow() {
   // Get today's date in ET timezone as YYYY-MM-DD
   const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
   // Parse 4 AM and 8 PM ET directly — Date will handle DST correctly
-  const dayStart = new Date(new Date(`${etDate}T08:00:00`).toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET').getTime();
+  const dayStart = new Date(new Date(`${etDate}T04:00:00`).toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET').getTime();
   // Simpler: use the offset between now's UTC and ET
   const now = new Date();
   const etNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const offsetMs = now - etNow; // ms to add to ET local time to get UTC
   const etMidnight = new Date(`${etDate}T00:00:00`).getTime();
   return {
-    dayStart: etMidnight + 8  * 3600000 + offsetMs,
+    dayStart: etMidnight + 4  * 3600000 + offsetMs,
     dayEnd:   etMidnight + 20 * 3600000 + offsetMs
   };
 }
@@ -2393,20 +2393,22 @@ function isExtendedHours() {
 }
 
 function scheduleNextPoll() {
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-    refreshInterval = null;
+  if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+  if (isExtendedHours()) {
+    refreshInterval = setInterval(() => {
+      if (isExtendedHours()) {
+        fetchAll();
+        setBadge(isMarketOpen() ? 'live' : 'poll');
+      } else {
+        fetchAll();
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+        setBadge('closed');
+        if (ws) { ws.close(); ws = null; }
+        if (tiingoWs) { tiingoWs.close(); tiingoWs = null; }
+      }
+    }, 15000);
   }
-
-  refreshInterval = setInterval(() => {
-    fetchAll();
-
-    if (isMarketOpen()) {
-      setBadge('live');
-    } else {
-      setBadge('poll');
-    }
-  }, 15000);
 }
 
 function showKeyModal() {
@@ -2431,8 +2433,8 @@ function connect() {
   if (!apiKey && !tiingoKey) { alert('Please enter at least one API key.'); return; }
   if (apiKey) localStorage.setItem('finnhub_key', apiKey);
 
-  const open = true;
-  setBadge('poll');
+  const open = isExtendedHours();
+  setBadge(open ? (isMarketOpen() ? 'poll' : 'poll') : 'closed');
 
   // Fetch quotes → prev closes → YTD → sectors → earnings → insiders → backfill
   fetchAll().then(async () => {
@@ -2443,9 +2445,10 @@ function connect() {
     fetchAllEarnings(allPortSyms);
     fetchAllInsiders(allPortSyms);
     await backfillChart();
-    scheduleNextPoll();
+    if (open) scheduleNextPoll();
   });
 
+  if (!open) return;
 
   // Use Tiingo WebSocket if key available, else fall back to Finnhub
   if (tiingoKey) {
