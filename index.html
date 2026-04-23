@@ -1250,7 +1250,7 @@ async function backfillChart() {
   await Promise.all(stockSyms.map(async sym => {
     try {
       const r = await fetch(
-        `https://api.tiingo.com/iex/${sym}/prices?startDate=${today}&resampleFreq=5min&token=${tiingoKey}`,
+        `${TIINGO_PROXY}/iex/${sym}/prices?startDate=${today}&resampleFreq=5min&token=${tiingoKey}`,
         { headers: { 'Authorization': `Token ${tiingoKey}` } }
       );
       const d = await r.json();
@@ -1781,13 +1781,13 @@ function addWatchSymbol() {
   }
 }
 
-// ═══ DATA FETCHING ═══
+const TIINGO_PROXY = 'https://tiingo-proxy-1m06.onrender.com/tiingo';
 
 // Tiingo quote — maps to same quotes{} structure the rest of the app uses
 async function fetchTiingoQuote(sym) {
   if (!tiingoKey || sym === 'CASH') return;
   try {
-    const r = await fetch(`https://api.tiingo.com/iex/${sym}?token=${tiingoKey}`, {
+    const r = await fetch(`${TIINGO_PROXY}/iex/${sym}?token=${tiingoKey}`, {
       headers: { 'Authorization': `Token ${tiingoKey}` }
     });
     const arr = await r.json();
