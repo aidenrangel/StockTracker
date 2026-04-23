@@ -478,6 +478,21 @@ footer a{color:var(--text2)}
       <div class="sc"><div class="sc-label">Day Change</div><div class="sc-val" id="ov-day">—</div><div class="sc-sub flat" id="ov-day-pct">—</div></div>
     </div>
 
+    <!-- Combined P&L chart -->
+    <div class="chart-panel" id="ov-chart-panel" style="display:none;margin-bottom:1.25rem">
+      <div class="chart-head">
+        <div>
+          <div class="chart-title">Combined Today's P&amp;L</div>
+          <div class="chart-sub" id="ov-chart-sub">Portfolio + Roth IRA</div>
+        </div>
+        <div>
+          <div class="chart-val" id="ov-chart-val">—</div>
+          <div class="chart-delta" id="ov-chart-delta"></div>
+        </div>
+      </div>
+      <div style="height:180px;position:relative"><canvas id="ov-chart"></canvas></div>
+    </div>
+
     <!-- Side-by-side account cards -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.25rem">
       <!-- Portfolio card -->
@@ -675,7 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ═══ STATE ═══
 let apiKey = localStorage.getItem('finnhub_key') || '';
 let ws = null, refreshInterval = null, editingSym = null, activeMarketSym = null;
-let portChart = null, donutChart = null;
+let portChart = null, donutChart = null, ovChart = null;
 let sortCol = 'mktVal', sortDir = -1;
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
@@ -684,6 +699,7 @@ let rPortfolio = JSON.parse(localStorage.getItem('roth_portfolio') || '{}');
 let quotes = {}, prevClose = {}, ytdClose = {};
 const portHistory = [];
 const rHistory = [];
+const ovHistory = [];
 let rChart = null, rSortColV = 'mktVal', rSortDirV = -1, rEditingSym = null;
 let newsCache = [], newsFilter = 'all', newsFetched = false;
 
@@ -875,7 +891,7 @@ function setSummary(val, cost, gl, glPct, dayGL, dayPct) {
   const dEl = document.getElementById('sum-day'), dPEl = document.getElementById('sum-day-pct');
   dEl.textContent = dayGL != null ? fs$(dayGL) : '—'; dEl.className = 'sc-val ' + (dayGL != null ? dir(dayGL) : 'flat');
   dPEl.textContent = dayPct != null ? fp(dayPct) : '—'; dPEl.className = 'sc-sub ' + (dayPct != null ? dir(dayPct) : 'flat');
-  if (dayGL != null) pushChartPoint(dayGL);
+  if (dayGL != null) { pushChartPoint(dayGL); pushOvChartPoint(); }
 }
 
 // ═══ OVERVIEW ═══
@@ -902,6 +918,7 @@ function calcPortStats(port) {
 }
 
 function renderOverview() {
+  renderOvChart();
   const p = calcPortStats(portfolio);
   const r = calcPortStats(rPortfolio);
 
@@ -1086,7 +1103,7 @@ function rSetSummary(val,cost,gl,glPct,dayGL,dayPct){
   const dEl=document.getElementById('r-sum-day'),dPEl=document.getElementById('r-sum-day-pct');
   dEl.textContent=dayGL!=null?fs$(dayGL):'—'; dEl.className='sc-val '+(dayGL!=null?dir(dayGL):'flat');
   dPEl.textContent=dayPct!=null?fp(dayPct):'—'; dPEl.className='sc-sub '+(dayPct!=null?dir(dayPct):'flat');
-  if(dayGL!=null) rPushChart(dayGL);
+  if(dayGL!=null) { rPushChart(dayGL); pushOvChartPoint(); }
 }
 
 function rPushChart(val,t=null,seeded=false){
@@ -1267,6 +1284,69 @@ function renderChart() {
     return;
   }
   portChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{ data: vals, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y) }, displayColors: false } },
+      scales: {
+        x: { ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { display: false }, border: { display: false } },
+        y: { position: 'right',
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v); const s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
+          grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
+          border: { display: false }
+        }
+      },
+      animation: false
+    }
+  });
+}
+
+// ═══ COMBINED OVERVIEW CHART ═══
+function pushOvChartPoint() {
+  // Sum latest dayGL from both portfolios
+  const portLast = portHistory[portHistory.length - 1];
+  const rothLast = rHistory[rHistory.length - 1];
+  if (!portLast && !rothLast) return;
+  const combined = (portLast ? portLast.v : 0) + (rothLast ? rothLast.v : 0);
+  const now = new Date();
+  const last = ovHistory[ovHistory.length - 1];
+  if (last && Math.abs(last.v - combined) < 0.01 && (now - last.t) < 5000) return;
+  ovHistory.push({ t: now, v: combined });
+  if (ovHistory.length > 400) ovHistory.shift();
+  renderOvChart();
+}
+
+function renderOvChart() {
+  const wrap = document.getElementById('ov-chart-panel');
+  if (!wrap) return;
+  if (ovHistory.length < 2) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const vals = ovHistory.map(p => p.v);
+  const last = vals[vals.length - 1];
+  const isUp = last >= 0;
+  const color = isUp ? '#1a9470' : '#d94545';
+  const colorBg = isUp ? 'rgba(26,148,112,.07)' : 'rgba(217,69,69,.07)';
+  const valEl = document.getElementById('ov-chart-val');
+  valEl.textContent = fs$(last);
+  valEl.style.color = isUp ? 'var(--green-text)' : 'var(--red-text)';
+  const deltaEl = document.getElementById('ov-chart-delta');
+  const dayPct = document.getElementById('ov-day-pct')?.textContent || '';
+  deltaEl.textContent = (dayPct && dayPct !== '—' ? dayPct + ' ' : '') + 'today';
+  deltaEl.style.color = valEl.style.color;
+  const fmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('ov-chart-sub').textContent = `${fmt(ovHistory[0].t)} → ${fmt(ovHistory[ovHistory.length - 1].t)}`;
+  const labels = ovHistory.map(p => fmt(p.t));
+  const ctx = document.getElementById('ov-chart').getContext('2d');
+  if (ovChart) {
+    ovChart.data.labels = labels;
+    ovChart.data.datasets[0].data = vals;
+    ovChart.data.datasets[0].borderColor = color;
+    ovChart.data.datasets[0].backgroundColor = colorBg;
+    ovChart.update('none');
+    return;
+  }
+  ovChart = new Chart(ctx, {
     type: 'line',
     data: { labels, datasets: [{ data: vals, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
     options: {
