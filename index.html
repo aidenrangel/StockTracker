@@ -1320,9 +1320,9 @@ function renderChart() {
 
   // Fixed day window: 4 AM → 8 PM ET, regardless of current time
   const now = new Date();
-  const etStr = now.toLocaleDateString('en-US', { timeZone: 'America/San_Francisco' });
-  const dayStart = new Date(`${etStr} 01:00:00 PST`);
-  const dayEnd   = new Date(`${etStr} 17:00:00 PST`);
+  const etStr = now.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+  const dayStart = new Date(`${etStr} 04:00:00 EST`);
+  const dayEnd   = new Date(`${etStr} 20:00:00 EST`);
   // Use actual data extent if it falls outside window
   const minT = Math.min(dayStart.getTime(), portHistory[0].t.getTime());
   const maxT = Math.max(dayEnd.getTime(), portHistory[portHistory.length - 1].t.getTime());
