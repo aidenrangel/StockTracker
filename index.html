@@ -128,6 +128,13 @@ tbody td:first-child{text-align:left}
 .alloc-bar{height:100%;border-radius:2px;transition:width .4s ease}
 .alloc-pct{font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);width:40px;text-align:right}
 .idx-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:10px 16px;display:flex;flex-direction:column;gap:3px;min-width:110px;flex:1}
+.earnings-row{display:flex;align-items:center;gap:12px;padding:9px 4px;border-bottom:.5px solid var(--border)}
+.earnings-row:last-child{border-bottom:none}
+.earnings-sym{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;width:52px;flex-shrink:0}
+.earnings-name{font-size:12px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.earnings-date{font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);white-space:nowrap;flex-shrink:0}
+.earnings-when{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;white-space:nowrap;flex-shrink:0}
+.earnings-days{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;white-space:nowrap;min-width:52px;text-align:right;flex-shrink:0}
 .idx-sym{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text2)}
 .idx-price{font-family:'Space Mono',monospace;font-size:16px;font-weight:700}
 .idx-change{font-size:11px;font-weight:600}
@@ -318,11 +325,12 @@ footer a{color:var(--text2)}
       </table>
     </div>
 
+    <div class="panel" id="port-earnings-panel" style="display:none">
+      <div class="panel-title">Upcoming Earnings</div>
+      <div id="port-earnings-body"></div>
+    </div>
+
     <div class="panel">
-      <div class="panel-title">Add Position <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);font-size:11px">— tip: use symbol <span style="font-family:'Space Mono',monospace">CASH</span> to add a cash balance</span></div>
-      <div class="form-row">
-        <div class="form-group"><label>Symbol</label><input type="text" class="sym-in" id="pos-sym" placeholder="AAPL" maxlength="10" /></div>
-        <div class="form-group"><label>Shares</label><input type="number" class="num-in" id="pos-shares" placeholder="10" min="0" step="any" /></div>
         <div class="form-group"><label>Avg Cost / Share ($)</label><input type="number" class="num-in" id="pos-cost" placeholder="150.00" min="0" step="any" /></div>
         <button class="btn primary" style="margin-bottom:1px" onclick="addPosition()">Add</button>
       </div>
@@ -369,6 +377,11 @@ footer a{color:var(--text2)}
         </tr></thead>
         <tbody id="r-tbody"></tbody>
       </table>
+    </div>
+
+    <div class="panel" id="roth-earnings-panel" style="display:none">
+      <div class="panel-title">Upcoming Earnings</div>
+      <div id="roth-earnings-body"></div>
     </div>
 
     <div class="panel">
@@ -1123,7 +1136,7 @@ function rAddPosition(){
   document.getElementById('r-pos-sym').value=''; document.getElementById('r-pos-shares').value=''; document.getElementById('r-pos-cost').value='';
   setMsg('r-pos-msg',`Added ${sym} — ${shares} shares @ ${f$(cost)}`,'ok');
   renderRoth();
-  if(apiKey){fetchQuote(sym);fetchPrevClose(sym);fetchYTD(sym);fetchSector(sym);}
+  if(apiKey){fetchQuote(sym);fetchPrevClose(sym);fetchYTD(sym);fetchSector(sym);fetchEarnings(sym);}
 }
 
 function rOpenEdit(sym){
@@ -1584,10 +1597,7 @@ function addPosition() {
   setMsg('pos-msg', `Added ${sym} — ${shares} shares @ ${f$(cost)}`, 'ok');
   renderPortfolio(); renderMarket(); renderChips();
   if (apiKey) {
-    fetchQuote(sym);
-    fetchPrevClose(sym);
-    fetchYTD(sym);
-    fetchSector(sym);
+    fetchQuote(sym); fetchPrevClose(sym); fetchYTD(sym); fetchSector(sym); fetchEarnings(sym);
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subscribe', symbol: sym }));
   }
 }
@@ -1806,6 +1816,78 @@ async function fetchAllSectors() {
   for (const s of syms) await fetchSector(s);
 }
 
+// ═══ EARNINGS ═══
+const earningsCache = {}; // sym -> {date, epsEstimate, hour}
+const EARNINGS_WINDOW_DAYS = 60;
+
+async function fetchEarnings(sym) {
+  if (!apiKey || sym === 'CASH' || earningsCache[sym] !== undefined) return;
+  try {
+    const now = new Date();
+    const from = now.toISOString().split('T')[0];
+    const to = new Date(now.getTime() + EARNINGS_WINDOW_DAYS * 86400000).toISOString().split('T')[0];
+    const r = await fetch(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&symbol=${sym}&token=${apiKey}`);
+    const d = await r.json();
+    const items = d?.earningsCalendar;
+    if (items && items.length > 0) {
+      // Pick the soonest upcoming date
+      const upcoming = items.sort((a, b) => a.date.localeCompare(b.date))[0];
+      earningsCache[sym] = { date: upcoming.date, eps: upcoming.epsEstimate, hour: upcoming.hour };
+    } else {
+      earningsCache[sym] = null; // no upcoming earnings in window
+    }
+    renderEarnings();
+  } catch(e) { console.error('fetchEarnings', sym, e); }
+}
+
+async function fetchAllEarnings(syms) {
+  for (const s of syms) await fetchEarnings(s);
+}
+
+function renderEarnings() {
+  renderEarningsFor('port', Object.keys(portfolio).filter(s => s !== 'CASH'));
+  renderEarningsFor('roth', Object.keys(rPortfolio).filter(s => s !== 'CASH'));
+}
+
+function renderEarningsFor(prefix, syms) {
+  const panel = document.getElementById(prefix + '-earnings-panel');
+  const body = document.getElementById(prefix + '-earnings-body');
+  if (!panel || !body) return;
+
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const rows = syms
+    .map(sym => {
+      const e = earningsCache[sym];
+      if (!e) return null;
+      const eDate = new Date(e.date + 'T00:00:00');
+      const daysAway = Math.round((eDate - today) / 86400000);
+      return { sym, date: e.date, eDate, daysAway, eps: e.eps, hour: e.hour };
+    })
+    .filter(r => r && r.daysAway >= 0)
+    .sort((a, b) => a.daysAway - b.daysAway);
+
+  if (!rows.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+
+  body.innerHTML = rows.map(r => {
+    const dateStr = r.eDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const daysLabel = r.daysAway === 0 ? 'Today' : r.daysAway === 1 ? 'Tomorrow' : `${r.daysAway}d away`;
+    const daysColor = r.daysAway <= 3 ? 'var(--amber-text)' : r.daysAway <= 7 ? 'var(--text)' : 'var(--text3)';
+    const whenLabel = r.hour === 'bmo' ? 'Pre-market' : r.hour === 'amc' ? 'After-hours' : '';
+    const whenBg = r.hour === 'bmo' ? 'var(--blue-bg)' : r.hour === 'amc' ? 'var(--surface2)' : '';
+    const whenColor = r.hour === 'bmo' ? 'var(--blue-text)' : r.hour === 'amc' ? 'var(--text3)' : '';
+    const epsStr = r.eps != null ? `Est. EPS ${r.eps >= 0 ? '+' : ''}${r.eps.toFixed(2)}` : '';
+    return `<div class="earnings-row">
+      <span class="earnings-sym">${r.sym}</span>
+      <span class="earnings-name">${NAMES[r.sym] || ''}${epsStr ? ' · ' + epsStr : ''}</span>
+      <span class="earnings-date">${dateStr}</span>
+      ${whenLabel ? `<span class="earnings-when" style="background:${whenBg};color:${whenColor}">${whenLabel}</span>` : '<span></span>'}
+      <span class="earnings-days" style="color:${daysColor}">${daysLabel}</span>
+    </div>`;
+  }).join('');
+}
+
 // ═══ NEWS ═══
 function newsSyms() {
   return [...new Set([
@@ -1957,6 +2039,8 @@ function connect() {
     await fetchAllPrevClose();
     await fetchAllYTD();
     await fetchAllSectors();
+    const allPortSyms = [...new Set([...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH'))];
+    fetchAllEarnings(allPortSyms);
     await backfillChart();
     if (open) scheduleNextPoll();
   });
