@@ -271,12 +271,12 @@ footer a{color:var(--text2)}
   <div class="modal" style="width:380px">
     <h3>API Keys</h3>
     <div class="form-group" style="margin-top:14px">
-      <label>Finnhub API Key <span style="font-weight:400;color:var(--text3);font-size:11px">— real-time quotes &amp; data</span></label>
-      <input type="text" id="key-modal-input" placeholder="Paste your Finnhub key…" style="width:100%;font-family:'Space Mono',monospace;font-size:12px" />
+      <label>Tiingo API Key <span style="font-weight:400;color:var(--text3);font-size:11px">— live prices &amp; chart <a href="https://www.tiingo.com/account/api/token" target="_blank" style="color:var(--blue-text)">get key</a></span></label>
+      <input type="text" id="tiingo-key-input" placeholder="Paste your Tiingo key…" style="width:100%;font-family:'Space Mono',monospace;font-size:12px" />
     </div>
     <div class="form-group" style="margin-bottom:0">
-      <label>Alpha Vantage API Key <span style="font-weight:400;color:var(--text3);font-size:11px">— chart backfill (optional) <a href="https://www.alphavantage.co/support/#api-key" target="_blank" style="color:var(--blue-text)">free key</a></span></label>
-      <input type="text" id="av-key-input" placeholder="Paste your Alpha Vantage key…" style="width:100%;font-family:'Space Mono',monospace;font-size:12px" />
+      <label>Finnhub API Key <span style="font-weight:400;color:var(--text3);font-size:11px">— news, earnings &amp; more</span></label>
+      <input type="text" id="key-modal-input" placeholder="Paste your Finnhub key…" style="width:100%;font-family:'Space Mono',monospace;font-size:12px" />
     </div>
     <div class="modal-btns" style="margin-top:16px">
       <button class="btn" onclick="closeKeyModal()">Cancel</button>
@@ -734,7 +734,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ═══ STATE ═══
 let apiKey = localStorage.getItem('finnhub_key') || '';
-let avKey = localStorage.getItem('av_key') || '';
+let tiingoKey = localStorage.getItem('tiingo_key') || '';
+let tiingoWs = null;
 let ws = null, refreshInterval = null, editingSym = null, activeMarketSym = null;
 let portChart = null, donutChart = null, ovChart = null;
 let sortCol = 'mktVal', sortDir = -1;
@@ -1236,53 +1237,44 @@ function pushChartPoint(val, t = null, seeded = false) {
   renderChart();
 }
 
-// Backfill chart from 9:30 AM ET using Alpha Vantage 5-min intraday candles
+// Backfill chart from 9:30 AM ET using Tiingo 5-min intraday
 async function backfillChart() {
-  if (!avKey) return; // No Alpha Vantage key, skip silently
+  if (!tiingoKey) return;
   const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
   if (!stockSyms.length) return;
 
-  // Compute market open timestamp
-  const now = new Date();
-  const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
-  const etNow = new Date(etStr);
-  const openET = new Date(etStr);
-  openET.setHours(9, 30, 0, 0);
-  if (etNow < openET) return; // market not open yet
+  const today = new Date().toISOString().split('T')[0];
+  console.log('backfillChart: Tiingo intraday, symbols=', stockSyms.length, 'date=', today);
 
-  console.log('backfillChart: using Alpha Vantage, symbols=', stockSyms.length);
-
-  // Fetch 5-min intraday for all positions — stagger to avoid rate limit (5 calls/min free tier)
   const candleMap = {};
-  for (const sym of stockSyms) {
+  await Promise.all(stockSyms.map(async sym => {
     try {
-      const r = await fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${sym}&interval=5min&outputsize=compact&apikey=${avKey}`);
+      const r = await fetch(
+        `https://api.tiingo.com/iex/${sym}/prices?startDate=${today}&resampleFreq=5min&token=${tiingoKey}`,
+        { headers: { 'Content-Type': 'application/json' } }
+      );
       const d = await r.json();
-      const series = d['Time Series (5min)'];
-      if (!series) { console.log('AV backfill no data for', sym, d['Note'] || d['Information'] || ''); continue; }
-      candleMap[sym] = {};
-      Object.entries(series).forEach(([timeStr, bar]) => {
-        // timeStr is like "2024-04-23 09:35:00" in ET
-        const t = new Date(timeStr + ' EDT');
-        // Only keep today's data from 9:30 onwards
-        if (t >= openET) candleMap[sym][t.getTime()] = parseFloat(bar['4. close']);
-      });
-      console.log('AV backfill', sym, 'points=', Object.keys(candleMap[sym]).length);
-    } catch(e) { console.error('AV backfill error', sym, e); }
-    // Small delay to avoid hitting rate limit (5 requests/min on free tier)
-    await new Promise(res => setTimeout(res, 200));
-  }
+      if (Array.isArray(d) && d.length > 0) {
+        candleMap[sym] = {};
+        d.forEach(bar => {
+          const t = new Date(bar.date).getTime();
+          candleMap[sym][t] = bar.close;
+        });
+        console.log('backfillChart Tiingo', sym, 'points=', d.length);
+      } else {
+        console.log('backfillChart Tiingo', sym, 'no data', d);
+      }
+    } catch(e) { console.error('backfillChart Tiingo error', sym, e); }
+  }));
 
-  if (!Object.keys(candleMap).length) return;
+  if (!Object.keys(candleMap).length) { console.log('backfillChart: no data returned'); return; }
 
-  // Build unified sorted timeline
   const allTimes = [...new Set(
     Object.values(candleMap).flatMap(m => Object.keys(m).map(Number))
   )].sort((a, b) => a - b);
 
   if (!allTimes.length) return;
 
-  // For each time point, compute portfolio P&L vs prev close
   const lastKnown = {};
   stockSyms.forEach(sym => { lastKnown[sym] = prevClose[sym] ?? quotes[sym]?.pc ?? null; });
 
@@ -1300,9 +1292,8 @@ async function backfillChart() {
     if (hasAny) pushChartPoint(dayGL, new Date(t), true);
   });
 
-  const count = allTimes.length;
-  document.getElementById('chart-sub').textContent = `Market open · ${count} data points loaded`;
-  console.log('backfillChart: done,', count, 'time points');
+  document.getElementById('chart-sub').textContent = `Market open · ${allTimes.length} points loaded`;
+  console.log('backfillChart: done,', allTimes.length, 'points');
 }
 
 function renderChart() {
@@ -1791,7 +1782,32 @@ function addWatchSymbol() {
 }
 
 // ═══ DATA FETCHING ═══
+
+// Tiingo quote — maps to same quotes{} structure the rest of the app uses
+async function fetchTiingoQuote(sym) {
+  if (!tiingoKey || sym === 'CASH') return;
+  try {
+    const r = await fetch(`https://api.tiingo.com/iex/${sym}?token=${tiingoKey}`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const d = await r.json();
+    if (d && d.tngoLast != null) {
+      quotes[sym] = {
+        c: d.tngoLast,
+        o: d.open ?? d.tngoLast,
+        h: d.high ?? d.tngoLast,
+        l: d.low ?? d.tngoLast,
+        pc: d.prevClose ?? d.tngoLast,
+        v: d.volume ?? 0
+      };
+      if (d.prevClose && !prevClose[sym]) prevClose[sym] = d.prevClose;
+      renderPortfolio(); renderRoth(); renderMarket();
+    }
+  } catch(e) { console.error('fetchTiingoQuote', sym, e); }
+}
+
 async function fetchQuote(sym) {
+  if (tiingoKey) return fetchTiingoQuote(sym);
   if (!apiKey || sym === 'CASH') return;
   try {
     const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`);
@@ -1799,15 +1815,55 @@ async function fetchQuote(sym) {
     if (d && d.c) {
       quotes[sym] = d;
       renderPortfolio(); renderRoth(); renderMarket();
-    }  } catch (e) { console.error('fetchQuote', sym, e); }
+    }
+  } catch (e) { console.error('fetchQuote', sym, e); }
 }
 
 async function fetchAll() {
   for (const s of allSyms()) await fetchQuote(s);
 }
 
+// Tiingo WebSocket for live price updates
+function connectTiingoWs() {
+  if (!tiingoKey) return;
+  if (tiingoWs) { tiingoWs.close(); tiingoWs = null; }
+  try {
+    tiingoWs = new WebSocket('wss://api.tiingo.com/iex');
+    tiingoWs.onopen = () => {
+      const syms = allSyms();
+      tiingoWs.send(JSON.stringify({
+        eventName: 'subscribe',
+        authorization: tiingoKey,
+        eventData: { thresholdLevel: 6, tickers: syms }
+      }));
+      setBadge('live');
+      if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+      console.log('Tiingo WS connected, subscribed to', syms.length, 'symbols');
+    };
+    tiingoWs.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.messageType === 'A' && Array.isArray(msg.data)) {
+        const d = msg.data;
+        // Reference price feed: [date, ticker, refPrice]
+        const sym = d[1];
+        const price = d[2];
+        if (sym && price != null) {
+          if (!quotes[sym]) quotes[sym] = { c: price, o: price, h: price, l: price, pc: price, v: 0 };
+          else quotes[sym].c = price;
+          renderPortfolio(); renderRoth(); renderMarket();
+        }
+      }
+    };
+    tiingoWs.onerror = () => { setBadge('poll'); scheduleNextPoll(); };
+    tiingoWs.onclose = () => { if (isMarketOpen()) scheduleNextPoll(); else setBadge('closed'); };
+  } catch(e) { console.error('Tiingo WS error', e); setBadge('poll'); scheduleNextPoll(); }
+}
+
 async function fetchPrevClose(sym) {
-  if (!apiKey || sym === 'CASH' || prevClose[sym] != null) return;
+  if (sym === 'CASH' || prevClose[sym] != null) return;
+  // If Tiingo already provided prevClose via quote, skip Finnhub call
+  if (tiingoKey && prevClose[sym] != null) return;
+  if (!apiKey) return;
   try {
     const now = new Date();
     const to = Math.floor(now.getTime() / 1000);
@@ -2281,45 +2337,43 @@ function scheduleNextPoll() {
       if (isMarketOpen()) {
         fetchAll();
       } else {
-        // Market just closed — do one final fetch then stop
         fetchAll();
         clearInterval(refreshInterval);
         refreshInterval = null;
-        setBadge('poll'); // downgrade from live
+        setBadge('closed');
         if (ws) { ws.close(); ws = null; }
-        document.getElementById('status-badge').title = 'Market closed';
+        if (tiingoWs) { tiingoWs.close(); tiingoWs = null; }
       }
     }, 15000);
   }
 }
 
 function showKeyModal() {
-  const el = document.getElementById('key-modal-input');
-  el.value = apiKey || '';
-  document.getElementById('av-key-input').value = avKey || '';
+  document.getElementById('key-modal-input').value = apiKey || '';
+  document.getElementById('tiingo-key-input').value = tiingoKey || '';
   document.getElementById('key-modal').classList.add('open');
-  setTimeout(() => el.focus(), 50);
+  setTimeout(() => document.getElementById('tiingo-key-input').focus(), 50);
 }
 function closeKeyModal() { document.getElementById('key-modal').classList.remove('open'); }
 function connectFromModal() {
-  const val = document.getElementById('key-modal-input').value.trim();
-  const avVal = document.getElementById('av-key-input').value.trim();
-  if (!val) return;
-  document.getElementById('api-key').value = val;
-  if (avVal) { avKey = avVal; localStorage.setItem('av_key', avKey); }
+  const fh = document.getElementById('key-modal-input').value.trim();
+  const ti = document.getElementById('tiingo-key-input').value.trim();
+  if (!fh && !ti) return;
+  if (fh) { apiKey = fh; localStorage.setItem('finnhub_key', fh); document.getElementById('api-key').value = fh; }
+  if (ti) { tiingoKey = ti; localStorage.setItem('tiingo_key', ti); }
   closeKeyModal();
   connect();
 }
 
 function connect() {
   apiKey = document.getElementById('api-key').value.trim();
-  if (!apiKey) { alert('Paste your Finnhub API key.'); return; }
-  localStorage.setItem('finnhub_key', apiKey);
+  if (!apiKey && !tiingoKey) { alert('Please enter at least one API key.'); return; }
+  if (apiKey) localStorage.setItem('finnhub_key', apiKey);
 
   const open = isMarketOpen();
   setBadge(open ? 'poll' : 'closed');
 
-  // Always: fetch quotes → fetch prev closes → backfill chart
+  // Fetch quotes → prev closes → YTD → sectors → earnings → insiders → backfill
   fetchAll().then(async () => {
     await fetchAllPrevClose();
     await fetchAllYTD();
@@ -2333,36 +2387,44 @@ function connect() {
 
   if (!open) return;
 
-  if (ws) { ws.close(); ws = null; }
-  try {
-    ws = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
-    ws.onopen = () => {
-      allSyms().forEach(s => ws.send(JSON.stringify({ type: 'subscribe', symbol: s })));
-      setBadge('live');
-      if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
-    };
-    ws.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.type === 'trade' && data.data) {
-        data.data.forEach(t => {
-          const s = t.s;
-          if (!quotes[s]) quotes[s] = { c: t.p, pc: t.p, o: t.p, h: t.p, l: t.p };
-          else quotes[s].c = t.p;
-        });
-        renderPortfolio(); renderRoth(); renderMarket();
-      }
-    };
-    ws.onerror = () => { setBadge('poll'); scheduleNextPoll(); };
-    ws.onclose = () => { if (isMarketOpen()) scheduleNextPoll(); else setBadge('closed'); };
-  } catch (e) { setBadge('poll'); scheduleNextPoll(); }
+  // Use Tiingo WebSocket if key available, else fall back to Finnhub
+  if (tiingoKey) {
+    connectTiingoWs();
+  } else if (apiKey) {
+    if (ws) { ws.close(); ws = null; }
+    try {
+      ws = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
+      ws.onopen = () => {
+        allSyms().forEach(s => ws.send(JSON.stringify({ type: 'subscribe', symbol: s })));
+        setBadge('live');
+        if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+      };
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'trade' && data.data) {
+          data.data.forEach(t => {
+            const s = t.s;
+            if (!quotes[s]) quotes[s] = { c: t.p, pc: t.p, o: t.p, h: t.p, l: t.p };
+            else quotes[s].c = t.p;
+          });
+          renderPortfolio(); renderRoth(); renderMarket();
+        }
+      };
+      ws.onerror = () => { setBadge('poll'); scheduleNextPoll(); };
+      ws.onclose = () => { if (isMarketOpen()) scheduleNextPoll(); else setBadge('closed'); };
+    } catch (e) { setBadge('poll'); scheduleNextPoll(); }
+  }
 }
 
 function disconnect() {
   if (ws) { ws.close(); ws = null; }
+  if (tiingoWs) { tiingoWs.close(); tiingoWs = null; }
   if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
   setBadge('disconnected');
   localStorage.removeItem('finnhub_key');
+  localStorage.removeItem('tiingo_key');
   apiKey = '';
+  tiingoKey = '';
 }
 
 // ═══ EVENT LISTENERS ═══
@@ -2378,6 +2440,7 @@ document.getElementById('co-modal').addEventListener('click', function(e) { if (
 document.getElementById('r-edit-modal').addEventListener('click', function(e) { if (e.target === this) rCloseModal(); });
 
 document.getElementById('key-modal-input').addEventListener('keydown', e => { if (e.key === 'Enter') connectFromModal(); });
+document.getElementById('tiingo-key-input').addEventListener('keydown', e => { if (e.key === 'Enter') connectFromModal(); });
 
 // ═══ INIT ═══
 if (apiKey) document.getElementById('api-key').value = apiKey;
