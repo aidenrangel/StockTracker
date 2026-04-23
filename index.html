@@ -127,7 +127,10 @@ tbody td:first-child{text-align:left}
 .alloc-bar-wrap{flex:1;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden}
 .alloc-bar{height:100%;border-radius:2px;transition:width .4s ease}
 .alloc-pct{font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);width:40px;text-align:right}
-.sector-row{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.idx-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:10px 16px;display:flex;flex-direction:column;gap:3px;min-width:110px;flex:1}
+.idx-sym{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text2)}
+.idx-price{font-family:'Space Mono',monospace;font-size:16px;font-weight:700}
+.idx-change{font-size:11px;font-weight:600}
 .sector-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-radius:var(--r-md);padding:4px 2px;transition:background .12s}
 .sector-head:hover{background:var(--surface2)}
 .sector-chevron{font-size:10px;color:var(--text3);transition:transform .2s;flex-shrink:0;margin-left:6px}
@@ -418,6 +421,9 @@ footer a{color:var(--text2)}
   <!-- MARKET -->
   <div id="view-market" style="display:none">
 
+    <!-- Index strip -->
+    <div id="index-strip" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap"></div>
+
     <!-- Legend + controls -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div style="font-size:12px;font-weight:500;color:var(--text2)">Sector Heatmap <span style="font-weight:400;color:var(--text3)">— size = market weight · color = day change</span></div>
@@ -692,7 +698,7 @@ function save() {
 
 function allSyms() {
   const all = [...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH');
-  return [...new Set([...all, ...watchlist])];
+  return [...new Set([...all, ...watchlist, ...INDEX_SYMS])];
 }
 
 function setBadge(s) {
@@ -1428,6 +1434,25 @@ function renderBreakdown() {
 }
 
 // ═══ MARKET HEATMAP ═══
+const INDEX_SYMS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VIX'];
+const INDEX_NAMES = { SPY: 'S&P 500', QQQ: 'Nasdaq 100', DIA: 'Dow Jones', IWM: 'Russell 2000', VIX: 'VIX' };
+
+function renderIndexStrip() {
+  const strip = document.getElementById('index-strip');
+  if (!strip) return;
+  strip.innerHTML = INDEX_SYMS.map(sym => {
+    const q = quotes[sym];
+    const pc = prevClose[sym] ?? q?.pc;
+    const pct = (q && pc) ? ((q.c - pc) / pc) * 100 : null;
+    const d = dir(pct);
+    const color = d === 'up' ? 'var(--green-text)' : d === 'dn' ? 'var(--red-text)' : 'var(--text2)';
+    return `<div class="idx-card">
+      <div class="idx-sym">${INDEX_NAMES[sym]}</div>
+      <div class="idx-price">${q ? f$(q.c) : '—'}</div>
+      <div class="idx-change" style="color:${color}">${pct != null ? (pct >= 0 ? '▲ +' : '▼ ') + pct.toFixed(2) + '%' : '—'}</div>
+    </div>`;
+  }).join('');
+}
 
 function heatColor(pct) {
   if (pct == null) return { bg: 'rgba(160,157,148,0.12)', text: 'var(--text3)' };
@@ -1443,6 +1468,7 @@ function heatColor(pct) {
 }
 
 function renderMarket() {
+  renderIndexStrip();
   const wrap = document.getElementById('heatmap-wrap');
   wrap.innerHTML = '';
 
@@ -1651,7 +1677,11 @@ async function fetchPrevClose(sym) {
 }
 
 async function fetchAllPrevClose() {
-  const syms = [...new Set([...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH'))];
+  const syms = [...new Set([
+    ...Object.keys(portfolio),
+    ...Object.keys(rPortfolio),
+    ...INDEX_SYMS
+  ].filter(s => s !== 'CASH'))];
   for (const s of syms) await fetchPrevClose(s);
 }
 
