@@ -1057,8 +1057,8 @@ function renderBreakdown() {
             <div class="sector-holding-name">${NAMES[p.sym] || ''}</div>
           </div>
           <div style="text-align:right">
-            <div class="sector-holding-pct">${pctOfSector.toFixed(1)}% of sector</div>
-            <div style="font-size:10px;color:var(--text3)">${p.weight.toFixed(1)}% of portfolio</div>
+            <div class="sector-holding-pct">${f$(p.mktVal)}</div>
+            <div style="font-size:10px;color:var(--text3)">${pctOfSector.toFixed(1)}% of sector · ${p.weight.toFixed(1)}% of portfolio</div>
           </div>
         </div>`;
       }).join('');
