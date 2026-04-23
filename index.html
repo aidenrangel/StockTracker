@@ -331,6 +331,10 @@ footer a{color:var(--text2)}
     </div>
 
     <div class="panel">
+      <div class="panel-title">Add Position <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);font-size:11px">— tip: use symbol <span style="font-family:'Space Mono',monospace">CASH</span> to add a cash balance</span></div>
+      <div class="form-row">
+        <div class="form-group"><label>Symbol</label><input type="text" class="sym-in" id="pos-sym" placeholder="AAPL" maxlength="10" /></div>
+        <div class="form-group"><label>Shares</label><input type="number" class="num-in" id="pos-shares" placeholder="10" min="0" step="any" /></div>
         <div class="form-group"><label>Avg Cost / Share ($)</label><input type="number" class="num-in" id="pos-cost" placeholder="150.00" min="0" step="any" /></div>
         <button class="btn primary" style="margin-bottom:1px" onclick="addPosition()">Add</button>
       </div>
