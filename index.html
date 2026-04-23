@@ -424,6 +424,39 @@ footer a{color:var(--text2)}
   </div>
 </div>
 
+<div class="modal-bg" id="co-modal">
+  <div class="modal" style="width:480px;max-width:95vw">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <img id="co-logo" src="" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:contain;display:none;background:var(--surface2)" />
+          <div>
+            <div style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700" id="co-sym">—</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px" id="co-name">—</div>
+          </div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:'Space Mono',monospace;font-size:22px;font-weight:700" id="co-price">—</div>
+        <div style="font-size:12px;font-weight:600;margin-top:2px" id="co-change">—</div>
+      </div>
+    </div>
+
+    <!-- Key stats grid -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px" id="co-stats"></div>
+
+    <!-- Description -->
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;max-height:80px;overflow-y:auto;margin-bottom:16px" id="co-desc"></div>
+
+    <!-- Meta row -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;font-size:11px;color:var(--text3)" id="co-meta"></div>
+
+    <div class="modal-btns">
+      <button class="btn" onclick="document.getElementById('co-modal').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="r-edit-modal">
   <div class="modal">
     <h3 id="r-edit-title">Edit Position</h3>
@@ -1196,6 +1229,8 @@ function renderMarket() {
       tile.style.color = text;
       tile.style.flexGrow = widthPct;
       tile.style.flexBasis = widthPct + '%';
+      tile.style.cursor = 'pointer';
+      tile.onclick = () => showCompanyInfo(sym);
       tile.innerHTML = `
         <div class="ht-sym">${sym}</div>
         <div class="ht-pct">${pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : '—'}</div>
@@ -1384,6 +1419,7 @@ async function fetchAllYTD() {
 // ─── Dynamic sector lookup via Finnhub profile ─────────────────────────────
 const sectorCache = {}; // sym -> sector string
 const marketCapCache = {}; // sym -> market cap in millions
+const profileCache = {}; // sym -> full profile object
 
 async function fetchSector(sym) {
   if (!apiKey || sym === 'CASH' || sectorCache[sym]) return;
@@ -1393,10 +1429,75 @@ async function fetchSector(sym) {
     if (d && d.finnhubIndustry) {
       sectorCache[sym] = d.finnhubIndustry;
       if (d.marketCapitalization) marketCapCache[sym] = d.marketCapitalization;
+      profileCache[sym] = d;
       if (document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
       if (document.getElementById('view-market').style.display !== 'none') renderMarket();
     }
   } catch (e) { console.error('fetchSector', sym, e); }
+}
+
+function showCompanyInfo(sym) {
+  const q = quotes[sym];
+  const p = profileCache[sym];
+  const pc = prevClose[sym] ?? q?.pc;
+  const pct = (q && pc) ? ((q.c - pc) / pc) * 100 : null;
+  const d = dir(pct);
+
+  // Header
+  document.getElementById('co-sym').textContent = sym;
+  document.getElementById('co-name').textContent = p?.name || NAMES[sym] || sym;
+  document.getElementById('co-price').textContent = q ? f$(q.c) : '—';
+  const chEl = document.getElementById('co-change');
+  chEl.textContent = pct != null ? `${arr(d)} ${fp(pct)} today` : '—';
+  chEl.style.color = d === 'up' ? 'var(--green-text)' : d === 'dn' ? 'var(--red-text)' : 'var(--text2)';
+
+  // Logo
+  const logoEl = document.getElementById('co-logo');
+  if (p?.logo) { logoEl.src = p.logo; logoEl.style.display = ''; logoEl.onerror = () => { logoEl.style.display = 'none'; }; }
+  else logoEl.style.display = 'none';
+
+  // Stats
+  const fmtMCap = v => v == null ? '—' : v >= 1000 ? '$' + (v/1000).toFixed(1) + 'T' : '$' + v.toFixed(0) + 'B';
+  const stats = [
+    { label: 'Market Cap',  val: p?.marketCapitalization ? fmtMCap(p.marketCapitalization) : '—' },
+    { label: 'Open',        val: q ? f$(q.o) : '—' },
+    { label: 'Prev Close',  val: pc ? f$(pc) : '—' },
+    { label: 'Day High',    val: q ? f$(q.h) : '—' },
+    { label: 'Day Low',     val: q ? f$(q.l) : '—' },
+    { label: 'Volume',      val: q ? fv(q.v) : '—' },
+    { label: 'Sector',      val: sectorCache[sym] || '—' },
+    { label: 'Exchange',    val: p?.exchange || '—' },
+    { label: 'IPO Date',    val: p?.ipo || '—' },
+  ];
+  document.getElementById('co-stats').innerHTML = stats.map(s => `
+    <div style="background:var(--surface2);border-radius:var(--r-md);padding:10px 12px">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px;letter-spacing:.3px;text-transform:uppercase">${s.label}</div>
+      <div style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700">${s.val}</div>
+    </div>`).join('');
+
+  // Description — fetch if not cached
+  const descEl = document.getElementById('co-desc');
+  descEl.textContent = p ? (p.description || 'No description available.') : 'Loading…';
+
+  // Meta
+  const metaEl = document.getElementById('co-meta');
+  const metaItems = [];
+  if (p?.weburl) metaItems.push(`<a href="${p.weburl}" target="_blank" style="color:var(--blue-text)">${p.weburl.replace(/^https?:\/\//, '')}</a>`);
+  if (p?.country) metaItems.push(`🌍 ${p.country}`);
+  if (p?.currency) metaItems.push(`💱 ${p.currency}`);
+  metaEl.innerHTML = metaItems.join('<span style="opacity:.3;margin:0 2px">·</span>');
+
+  document.getElementById('co-modal').classList.add('open');
+
+  // If profile not yet fetched, fetch it now
+  if (!p && apiKey) {
+    fetchSector(sym).then(() => {
+      if (document.getElementById('co-modal').classList.contains('open') &&
+          document.getElementById('co-sym').textContent === sym) {
+        showCompanyInfo(sym); // re-render with fresh data
+      }
+    });
+  }
 }
 
 async function fetchAllSectors() {
@@ -1512,6 +1613,7 @@ document.getElementById('edit-modal').addEventListener('click', function(e) { if
 document.getElementById('r-pos-sym').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('r-pos-shares').focus(); });
 document.getElementById('r-pos-shares').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('r-pos-cost').focus(); });
 document.getElementById('r-pos-cost').addEventListener('keydown', e => { if (e.key === 'Enter') rAddPosition(); });
+document.getElementById('co-modal').addEventListener('click', function(e) { if (e.target === this) this.classList.remove('open'); });
 document.getElementById('r-edit-modal').addEventListener('click', function(e) { if (e.target === this) rCloseModal(); });
 
 document.getElementById('key-modal-input').addEventListener('keydown', e => { if (e.key === 'Enter') connectFromModal(); });
