@@ -353,6 +353,16 @@ footer a{color:var(--text2)}
       </div>
       <div class="msg" id="pos-msg"></div>
     </div>
+
+    <div class="panel">
+      <div class="panel-title">Import / Export</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn" onclick="exportCSV('portfolio')">⬇ Download CSV</button>
+        <label class="btn" style="cursor:pointer;margin:0">⬆ Upload CSV<input type="file" accept=".csv" style="display:none" onchange="importCSV(event,'portfolio')" /></label>
+        <span style="font-size:11px;color:var(--text3)">Format: Symbol, Shares, Avg Cost</span>
+      </div>
+      <div class="msg" id="csv-msg"></div>
+    </div>
   </div>
 
   <!-- ROTH IRA -->
@@ -415,6 +425,16 @@ footer a{color:var(--text2)}
         <button class="btn primary" style="margin-bottom:1px" onclick="rAddPosition()">Add</button>
       </div>
       <div class="msg" id="r-pos-msg"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Import / Export</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn" onclick="exportCSV('roth')">⬇ Download CSV</button>
+        <label class="btn" style="cursor:pointer;margin:0">⬆ Upload CSV<input type="file" accept=".csv" style="display:none" onchange="importCSV(event,'roth')" /></label>
+        <span style="font-size:11px;color:var(--text3)">Format: Symbol, Shares, Avg Cost</span>
+      </div>
+      <div class="msg" id="r-csv-msg"></div>
     </div>
   </div>
 
@@ -1917,6 +1937,63 @@ async function fetchAllSectors() {
     ...watchlist
   ].filter(s => s !== 'CASH'))];
   for (const s of syms) await fetchSector(s);
+}
+
+// ═══ CSV IMPORT / EXPORT ═══
+function exportCSV(account) {
+  const port = account === 'roth' ? rPortfolio : portfolio;
+  const filename = account === 'roth' ? 'roth_ira.csv' : 'portfolio.csv';
+  const rows = [['Symbol', 'Shares', 'Avg Cost']];
+  Object.entries(port).forEach(([sym, pos]) => {
+    rows.push([sym, pos.shares, pos.avgCost]);
+  });
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importCSV(event, account) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const msgId = account === 'roth' ? 'r-csv-msg' : 'csv-msg';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const lines = e.target.result.trim().split('\n');
+      let imported = 0, skipped = 0;
+      const port = account === 'roth' ? rPortfolio : portfolio;
+      lines.forEach((line, i) => {
+        const parts = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+        if (i === 0 && parts[0].toLowerCase() === 'symbol') return; // skip header
+        const [sym, sharesRaw, costRaw] = parts;
+        if (!sym) return;
+        const shares = parseFloat(sharesRaw);
+        const avgCost = parseFloat(costRaw);
+        if (isNaN(shares) || shares <= 0) { skipped++; return; }
+        if (sym === 'CASH') { port['CASH'] = { shares, avgCost: 1 }; imported++; return; }
+        if (isNaN(avgCost) || avgCost <= 0) { skipped++; return; }
+        port[sym] = { shares, avgCost };
+        imported++;
+      });
+      save();
+      if (account === 'roth') renderRoth(); else renderPortfolio();
+      setMsg(msgId, `Imported ${imported} position${imported !== 1 ? 's' : ''}${skipped ? `, skipped ${skipped}` : ''}.`, 'ok');
+      // Fetch data for all new symbols
+      if (apiKey) {
+        Object.keys(port).filter(s => s !== 'CASH').forEach(sym => {
+          fetchQuote(sym); fetchPrevClose(sym); fetchYTD(sym); fetchSector(sym);
+          fetchEarnings(sym); fetchInsider(sym);
+        });
+      }
+    } catch(err) {
+      setMsg(msgId, 'Error reading file. Make sure it\'s a valid CSV.', 'err');
+    }
+    event.target.value = ''; // reset file input
+  };
+  reader.readAsText(file);
 }
 
 // ═══ EARNINGS ═══
