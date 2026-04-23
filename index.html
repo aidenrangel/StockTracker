@@ -523,9 +523,8 @@ function save() {
 }
 
 function allSyms() {
-  const heatmapSyms = Object.values(HEATMAP_SECTORS).flat();
   const all = [...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH');
-  return [...new Set([...all, ...watchlist, ...heatmapSyms])];
+  return [...new Set([...all, ...watchlist])];
 }
 
 function setBadge(s) {
@@ -1132,17 +1131,6 @@ function renderBreakdown() {
 
 // ═══ MARKET HEATMAP ═══
 
-// Map watchlist symbols to sectors for grouping
-const HEATMAP_SECTORS = {
-  'Technology':      ['AAPL','MSFT','NVDA','GOOGL','AMD','INTC','TSM','ASML','ORCL','PLTR','IONQ','META'],
-  'Consumer Disc.':  ['TSLA','AMZN','DIS','SBUX','NFLX'],
-  'Financials':      ['JPM','GS','V','MA','BAC','COIN','SOFI'],
-  'Industrials':     ['LMT','RKLB'],
-  'Consumer Staples':['WMT','COST'],
-  'ETFs':            ['SPY','QQQ'],
-};
-
-// Returns background color based on day % change
 function heatColor(pct) {
   if (pct == null) return { bg: 'rgba(160,157,148,0.12)', text: 'var(--text3)' };
   if (pct >=  3)   return { bg: '#0d4f3b', text: '#3dba94' };
@@ -1160,43 +1148,43 @@ function renderMarket() {
   const wrap = document.getElementById('heatmap-wrap');
   wrap.innerHTML = '';
 
-  // Gather all symbols: sector map + any watchlist extras
-  const sectorSyms = new Set(Object.values(HEATMAP_SECTORS).flat());
-  const extras = watchlist.filter(s => !sectorSyms.has(s));
+  if (!watchlist.length) {
+    wrap.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:2rem 0">Add symbols to your watchlist below.</div>';
+    renderChips(); return;
+  }
 
-  const groups = { ...HEATMAP_SECTORS };
-  if (extras.length) groups['Other'] = extras;
+  // Group watchlist symbols by sector from sectorCache; unknown = 'Other'
+  const groups = {};
+  watchlist.forEach(sym => {
+    const sector = sectorCache[sym] || (sectorCache[sym] === undefined ? 'Loading…' : 'Other');
+    if (!groups[sector]) groups[sector] = [];
+    groups[sector].push(sym);
+  });
 
-  // Approximate relative market caps for tile sizing (rough weights, updated periodically)
-  const WEIGHTS = {
-    AAPL:3000,MSFT:2800,NVDA:2200,GOOGL:1800,AMZN:1700,META:1200,TSLA:700,
-    ASML:350,TSM:600,V:480,MA:380,JPM:450,NFLX:250,AMD:220,ORCL:300,
-    LMT:110,COST:260,WMT:380,GS:140,BAC:260,DIS:170,SBUX:90,
-    INTC:100,PLTR:90,SOFI:20,IONQ:10,RKLB:15,COIN:60,
-    SPY:500,QQQ:200,
-  };
-  const DEFAULT_WEIGHT = 50;
+  // Sort sectors alphabetically, but put 'Other' and 'Loading…' last
+  const sorted = Object.entries(groups).sort(([a], [b]) => {
+    if (a === 'Loading…') return 1; if (b === 'Loading…') return -1;
+    if (a === 'Other') return 1;    if (b === 'Other') return -1;
+    return a.localeCompare(b);
+  });
 
-  Object.entries(groups).forEach(([sector, syms]) => {
-    const validSyms = syms.filter(s => watchlist.includes(s) || Object.values(HEATMAP_SECTORS).flat().includes(s));
-    // Only show sectors that have at least one symbol in watchlist, or all symbols for built-in sectors
-    const showSyms = syms;
-    if (!showSyms.length) return;
-
+  sorted.forEach(([sector, syms]) => {
     const sectorEl = document.createElement('div');
     sectorEl.className = 'heatmap-sector';
-    sectorEl.innerHTML = `<div class="sector-label">${sector}</div><div class="sector-tiles" id="tiles-${sector.replace(/[^a-z]/gi,'_')}"></div>`;
+    sectorEl.innerHTML = `<div class="sector-label">${sector}</div><div class="sector-tiles"></div>`;
     wrap.appendChild(sectorEl);
 
     const tilesEl = sectorEl.querySelector('.sector-tiles');
-    const totalW = showSyms.reduce((s, sym) => s + (WEIGHTS[sym] || DEFAULT_WEIGHT), 0);
 
-    showSyms.forEach(sym => {
+    // Use market cap from quote price as tile weight proxy; fall back to equal sizing
+    const totalW = syms.reduce((s, sym) => s + (quotes[sym]?.c || 100), 0);
+
+    syms.forEach(sym => {
       const q = quotes[sym];
       const pc = prevClose[sym] ?? q?.pc;
       const pct = (q && pc) ? ((q.c - pc) / pc) * 100 : null;
       const { bg, text } = heatColor(pct);
-      const w = WEIGHTS[sym] || DEFAULT_WEIGHT;
+      const w = q?.c || 100;
       const flexGrow = Math.max(1, Math.round((w / totalW) * 20));
 
       const tile = document.createElement('div');
@@ -1311,6 +1299,7 @@ function addWatchSymbol() {
   renderMarket(); renderChips();
   if (apiKey) {
     fetchQuote(sym);
+    fetchSector(sym);
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subscribe', symbol: sym }));
   }
 }
@@ -1389,12 +1378,17 @@ async function fetchSector(sym) {
     if (d && d.finnhubIndustry) {
       sectorCache[sym] = d.finnhubIndustry;
       if (document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
+      if (document.getElementById('view-market').style.display !== 'none') renderMarket();
     }
   } catch (e) { console.error('fetchSector', sym, e); }
 }
 
 async function fetchAllSectors() {
-  const syms = [...new Set([...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH'))];
+  const syms = [...new Set([
+    ...Object.keys(portfolio),
+    ...Object.keys(rPortfolio),
+    ...watchlist
+  ].filter(s => s !== 'CASH'))];
   for (const s of syms) await fetchSector(s);
 }
 
