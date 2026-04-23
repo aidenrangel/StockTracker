@@ -1306,14 +1306,14 @@ function getDayWindow() {
   // Get today's date in ET timezone as YYYY-MM-DD
   const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
   // Parse 4 AM and 8 PM ET directly — Date will handle DST correctly
-  const dayStart = new Date(new Date(`${etDate}T04:00:00`).toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET').getTime();
+  const dayStart = new Date(new Date(`${etDate}T08:00:00`).toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET').getTime();
   // Simpler: use the offset between now's UTC and ET
   const now = new Date();
   const etNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const offsetMs = now - etNow; // ms to add to ET local time to get UTC
   const etMidnight = new Date(`${etDate}T00:00:00`).getTime();
   return {
-    dayStart: etMidnight + 4  * 3600000 + offsetMs,
+    dayStart: etMidnight + 8  * 3600000 + offsetMs,
     dayEnd:   etMidnight + 20 * 3600000 + offsetMs
   };
 }
