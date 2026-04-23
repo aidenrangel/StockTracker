@@ -2393,22 +2393,20 @@ function isExtendedHours() {
 }
 
 function scheduleNextPoll() {
-  if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
-  if (isExtendedHours()) {
-    refreshInterval = setInterval(() => {
-      if (isExtendedHours()) {
-        fetchAll();
-        setBadge(isMarketOpen() ? 'live' : 'poll');
-      } else {
-        fetchAll();
-        clearInterval(refreshInterval);
-        refreshInterval = null;
-        setBadge('closed');
-        if (ws) { ws.close(); ws = null; }
-        if (tiingoWs) { tiingoWs.close(); tiingoWs = null; }
-      }
-    }, 5000);
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
   }
+
+  refreshInterval = setInterval(() => {
+    fetchAll();
+
+    if (isMarketOpen()) {
+      setBadge('live');
+    } else {
+      setBadge('poll');
+    }
+  }, 15000);
 }
 
 function showKeyModal() {
