@@ -738,6 +738,7 @@ let tiingoKey = localStorage.getItem('tiingo_key') || '';
 let tiingoWs = null;
 let ws = null, refreshInterval = null, editingSym = null, activeMarketSym = null;
 let portChart = null, donutChart = null, ovChart = null;
+let backfilling = false; // suppress chart renders until backfill is complete
 let sortCol = 'mktVal', sortDir = -1;
 
 let portfolio = JSON.parse(localStorage.getItem('mkt_portfolio') || '{}');
@@ -1234,7 +1235,7 @@ function pushChartPoint(val, t = null, seeded = false) {
   if (!seeded && last && Math.abs(last.v - val) < 0.01 && (now - last.t) < 5000) return;
   portHistory.push({ t: now, v: val });
   if (portHistory.length > 400) portHistory.shift();
-  renderChart();
+  if (!backfilling) renderChart();
 }
 
 // Backfill chart from 4 AM ET (pre-market) using Tiingo 5-min intraday
@@ -1242,6 +1243,8 @@ async function backfillChart() {
   if (!tiingoKey) return;
   const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
   if (!stockSyms.length) return;
+
+  backfilling = true; // suppress chart renders during load
 
   const today = new Date().toISOString().split('T')[0];
   console.log('backfillChart: Tiingo intraday, symbols=', stockSyms.length, 'date=', today);
@@ -1267,13 +1270,13 @@ async function backfillChart() {
     } catch(e) { console.error('backfillChart Tiingo error', sym, e); }
   }));
 
-  if (!Object.keys(candleMap).length) { console.log('backfillChart: no data returned'); return; }
+  if (!Object.keys(candleMap).length) { console.log('backfillChart: no data returned'); backfilling = false; return; }
 
   const allTimes = [...new Set(
     Object.values(candleMap).flatMap(m => Object.keys(m).map(Number))
   )].sort((a, b) => a - b);
 
-  if (!allTimes.length) return;
+  if (!allTimes.length) { backfilling = false; return; }
 
   const lastKnown = {};
   stockSyms.forEach(sym => { lastKnown[sym] = prevClose[sym] ?? quotes[sym]?.pc ?? null; });
@@ -1294,6 +1297,27 @@ async function backfillChart() {
 
   document.getElementById('chart-sub').textContent = `Market open · ${allTimes.length} points loaded`;
   console.log('backfillChart: done,', allTimes.length, 'points');
+  backfilling = false;
+  renderChart(); // single render once all data is ready
+}
+
+// Get today's 4 AM and 8 PM ET as UTC ms timestamps — works in any local timezone
+function getDayWindow() {
+  const now = new Date();
+  const p = {};
+  new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(now).forEach(({type, value}) => p[type] = value);
+  // ET midnight in UTC
+  const etMidnightLocal = new Date(`${p.year}-${p.month}-${p.day}T00:00:00`);
+  const etMidnightUTC   = new Date(etMidnightLocal.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const offsetMs = etMidnightLocal - etMidnightUTC; // how many ms ahead UTC is of ET midnight
+  const midnight = new Date(`${p.year}-${p.month}-${p.day}T00:00:00Z`).getTime() + offsetMs;
+  return {
+    dayStart: midnight + 4  * 3600000, // 4 AM ET
+    dayEnd:   midnight + 20 * 3600000  // 8 PM ET
+  };
 }
 
 function renderChart() {
@@ -1318,14 +1342,10 @@ function renderChart() {
   const fmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   document.getElementById('chart-sub').textContent = `${fmt(portHistory[0].t)} → ${fmt(portHistory[portHistory.length - 1].t)}`;
 
-  // Fixed day window: 4 AM → 8 PM ET, regardless of current time
-  const now = new Date();
-  const etStr = now.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
-  const dayStart = new Date(`${etStr} 04:00:00 EST`);
-  const dayEnd   = new Date(`${etStr} 20:00:00 EST`);
-  // Use actual data extent if it falls outside window
-  const minT = Math.min(dayStart.getTime(), portHistory[0].t.getTime());
-  const maxT = Math.max(dayEnd.getTime(), portHistory[portHistory.length - 1].t.getTime());
+  // Fixed day window: 4 AM → 8 PM ET
+  const { dayStart, dayEnd } = getDayWindow();
+  const minT = Math.min(dayStart, portHistory[0].t.getTime());
+  const maxT = Math.max(dayEnd,   portHistory[portHistory.length - 1].t.getTime());
 
   const data = portHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
 
@@ -1401,12 +1421,9 @@ function renderOvChart() {
   const fmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   document.getElementById('ov-chart-sub').textContent = `${fmt(ovHistory[0].t)} → ${fmt(ovHistory[ovHistory.length - 1].t)}`;
 
-  const now = new Date();
-  const etStr = now.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
-  const dayStart = new Date(`${etStr} 04:00:00 EST`);
-  const dayEnd   = new Date(`${etStr} 20:00:00 EST`);
-  const minT = Math.min(dayStart.getTime(), ovHistory[0].t.getTime());
-  const maxT = Math.max(dayEnd.getTime(), ovHistory[ovHistory.length - 1].t.getTime());
+  const { dayStart, dayEnd } = getDayWindow();
+  const minT = Math.min(dayStart, ovHistory[0].t.getTime());
+  const maxT = Math.max(dayEnd,   ovHistory[ovHistory.length - 1].t.getTime());
   const data = ovHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
 
   const ctx = document.getElementById('ov-chart').getContext('2d');
