@@ -1176,15 +1176,15 @@ function renderMarket() {
 
     const tilesEl = sectorEl.querySelector('.sector-tiles');
 
-    // Use market cap from quote price as tile weight proxy; fall back to equal sizing
-    const totalW = syms.reduce((s, sym) => s + (quotes[sym]?.c || 100), 0);
+    // Use market cap for tile sizing; fall back to equal sizing if not yet loaded
+    const totalW = syms.reduce((s, sym) => s + (marketCapCache[sym] || 100), 0);
 
     syms.forEach(sym => {
       const q = quotes[sym];
       const pc = prevClose[sym] ?? q?.pc;
       const pct = (q && pc) ? ((q.c - pc) / pc) * 100 : null;
       const { bg, text } = heatColor(pct);
-      const w = q?.c || 100;
+      const w = marketCapCache[sym] || 100;
       const flexGrow = Math.max(1, Math.round((w / totalW) * 20));
 
       const tile = document.createElement('div');
@@ -1369,6 +1369,7 @@ async function fetchAllYTD() {
 
 // ─── Dynamic sector lookup via Finnhub profile ─────────────────────────────
 const sectorCache = {}; // sym -> sector string
+const marketCapCache = {}; // sym -> market cap in millions
 
 async function fetchSector(sym) {
   if (!apiKey || sym === 'CASH' || sectorCache[sym]) return;
@@ -1377,6 +1378,7 @@ async function fetchSector(sym) {
     const d = await r.json();
     if (d && d.finnhubIndustry) {
       sectorCache[sym] = d.finnhubIndustry;
+      if (d.marketCapitalization) marketCapCache[sym] = d.marketCapitalization;
       if (document.getElementById('view-breakdown').style.display !== 'none') renderBreakdown();
       if (document.getElementById('view-market').style.display !== 'none') renderMarket();
     }
