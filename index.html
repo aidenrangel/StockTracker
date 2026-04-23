@@ -359,6 +359,7 @@ footer a{color:var(--text2)}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn" onclick="exportCSV('portfolio')">⬇ Download CSV</button>
         <label class="btn" style="cursor:pointer;margin:0">⬆ Upload CSV<input type="file" accept=".csv" style="display:none" onchange="importCSV(event,'portfolio')" /></label>
+        <button class="btn danger" onclick="resetHoldings('portfolio')">✕ Reset All</button>
         <span style="font-size:11px;color:var(--text3)">Format: Symbol, Shares, Avg Cost</span>
       </div>
       <div class="msg" id="csv-msg"></div>
@@ -432,6 +433,7 @@ footer a{color:var(--text2)}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn" onclick="exportCSV('roth')">⬇ Download CSV</button>
         <label class="btn" style="cursor:pointer;margin:0">⬆ Upload CSV<input type="file" accept=".csv" style="display:none" onchange="importCSV(event,'roth')" /></label>
+        <button class="btn danger" onclick="resetHoldings('roth')">✕ Reset All</button>
         <span style="font-size:11px;color:var(--text3)">Format: Symbol, Shares, Avg Cost</span>
       </div>
       <div class="msg" id="r-csv-msg"></div>
@@ -1994,6 +1996,21 @@ function importCSV(event, account) {
     event.target.value = ''; // reset file input
   };
   reader.readAsText(file);
+}
+
+function resetHoldings(account) {
+  const label = account === 'roth' ? 'Roth IRA' : 'Portfolio';
+  const msgId = account === 'roth' ? 'r-csv-msg' : 'csv-msg';
+  if (!confirm(`Are you sure you want to reset all ${label} holdings? This cannot be undone.`)) return;
+  if (account === 'roth') {
+    Object.keys(rPortfolio).forEach(k => delete rPortfolio[k]);
+    save(); renderRoth();
+    setMsg(msgId, 'Roth IRA holdings cleared.', 'ok');
+  } else {
+    Object.keys(portfolio).forEach(k => delete portfolio[k]);
+    save(); renderPortfolio();
+    setMsg(msgId, 'Portfolio holdings cleared.', 'ok');
+  }
 }
 
 // ═══ EARNINGS ═══
