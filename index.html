@@ -268,11 +268,15 @@ footer a{color:var(--text2)}
 
 <!-- API key modal -->
 <div class="modal-bg" id="key-modal">
-  <div class="modal" style="width:360px">
-    <h3>Finnhub API Key</h3>
-    <div class="form-group" style="margin-top:14px;margin-bottom:0">
-      <label>API Key</label>
+  <div class="modal" style="width:380px">
+    <h3>API Keys</h3>
+    <div class="form-group" style="margin-top:14px">
+      <label>Finnhub API Key <span style="font-weight:400;color:var(--text3);font-size:11px">— real-time quotes &amp; data</span></label>
       <input type="text" id="key-modal-input" placeholder="Paste your Finnhub key…" style="width:100%;font-family:'Space Mono',monospace;font-size:12px" />
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Alpha Vantage API Key <span style="font-weight:400;color:var(--text3);font-size:11px">— chart backfill (optional) <a href="https://www.alphavantage.co/support/#api-key" target="_blank" style="color:var(--blue-text)">free key</a></span></label>
+      <input type="text" id="av-key-input" placeholder="Paste your Alpha Vantage key…" style="width:100%;font-family:'Space Mono',monospace;font-size:12px" />
     </div>
     <div class="modal-btns" style="margin-top:16px">
       <button class="btn" onclick="closeKeyModal()">Cancel</button>
@@ -730,6 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ═══ STATE ═══
 let apiKey = localStorage.getItem('finnhub_key') || '';
+let avKey = localStorage.getItem('av_key') || '';
 let ws = null, refreshInterval = null, editingSym = null, activeMarketSym = null;
 let portChart = null, donutChart = null, ovChart = null;
 let sortCol = 'mktVal', sortDir = -1;
@@ -1231,50 +1236,57 @@ function pushChartPoint(val, t = null, seeded = false) {
   renderChart();
 }
 
-// Backfill chart from 9:30 AM ET using 1-min candles
+// Backfill chart from 9:30 AM ET using Alpha Vantage 5-min intraday candles
 async function backfillChart() {
+  if (!avKey) return; // No Alpha Vantage key, skip silently
   const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
-  console.log('backfillChart: symbols=', stockSyms, 'apiKey=', !!apiKey);
-  if (!stockSyms.length || !apiKey) return;
+  if (!stockSyms.length) return;
 
-  // Compute market open unix timestamp (9:30 AM ET, DST-aware)
+  // Compute market open timestamp
   const now = new Date();
-  const jan = new Date(now.getFullYear(), 0, 1).getTimezoneOffset();
-  const jul = new Date(now.getFullYear(), 6, 1).getTimezoneOffset();
-  const etOffset = Math.min(jan, jul) !== jan ? 4 : 5; // DST: UTC-4 summer, UTC-5 winter
-  const todayUTCMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const openUnix = Math.floor(todayUTCMidnight / 1000) + (9 * 3600 + 30 * 60) + etOffset * 3600;
-  const nowUnix  = Math.floor(Date.now() / 1000);
-  console.log('backfillChart: openUnix=', openUnix, 'nowUnix=', nowUnix, 'diff mins=', Math.round((nowUnix-openUnix)/60));
-  if (nowUnix < openUnix) { console.log('backfillChart: market not open yet'); return; }
+  const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const etNow = new Date(etStr);
+  const openET = new Date(etStr);
+  openET.setHours(9, 30, 0, 0);
+  if (etNow < openET) return; // market not open yet
 
-  // Fetch 1-min candles for all positions in parallel
+  console.log('backfillChart: using Alpha Vantage, symbols=', stockSyms.length);
+
+  // Fetch 5-min intraday for all positions — stagger to avoid rate limit (5 calls/min free tier)
   const candleMap = {};
-  await Promise.all(stockSyms.map(async sym => {
+  for (const sym of stockSyms) {
     try {
-      const r = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=5&from=${openUnix}&to=${nowUnix}&token=${apiKey}`);
+      const r = await fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${sym}&interval=5min&outputsize=compact&apikey=${avKey}`);
       const d = await r.json();
-      console.log('backfillChart candle', sym, 's=', d?.s, 'points=', d?.t?.length);
-      if (d && d.s === 'ok' && d.t && d.c) {
-        candleMap[sym] = {};
-        d.t.forEach((t, i) => { candleMap[sym][t] = d.c[i]; });
-      }
-    } catch (e) { console.error('backfill candle', sym, e); }
-  }));
+      const series = d['Time Series (5min)'];
+      if (!series) { console.log('AV backfill no data for', sym, d['Note'] || d['Information'] || ''); continue; }
+      candleMap[sym] = {};
+      Object.entries(series).forEach(([timeStr, bar]) => {
+        // timeStr is like "2024-04-23 09:35:00" in ET
+        const t = new Date(timeStr + ' EDT');
+        // Only keep today's data from 9:30 onwards
+        if (t >= openET) candleMap[sym][t.getTime()] = parseFloat(bar['4. close']);
+      });
+      console.log('AV backfill', sym, 'points=', Object.keys(candleMap[sym]).length);
+    } catch(e) { console.error('AV backfill error', sym, e); }
+    // Small delay to avoid hitting rate limit (5 requests/min on free tier)
+    await new Promise(res => setTimeout(res, 200));
+  }
 
-  console.log('backfillChart: candleMap keys=', Object.keys(candleMap));
-  if (!Object.keys(candleMap).length) { console.log('backfillChart: no candle data returned'); return; }
+  if (!Object.keys(candleMap).length) return;
 
-  // Build unified sorted minute timeline
+  // Build unified sorted timeline
   const allTimes = [...new Set(
     Object.values(candleMap).flatMap(m => Object.keys(m).map(Number))
   )].sort((a, b) => a - b);
 
-  // For each minute, compute portfolio P&L vs prev close, carry-forward last known price
+  if (!allTimes.length) return;
+
+  // For each time point, compute portfolio P&L vs prev close
   const lastKnown = {};
   stockSyms.forEach(sym => { lastKnown[sym] = prevClose[sym] ?? quotes[sym]?.pc ?? null; });
 
-  portHistory.length = 0; // clear any existing points
+  portHistory.length = 0;
   allTimes.forEach(t => {
     let dayGL = 0, hasAny = false;
     stockSyms.forEach(sym => {
@@ -1285,11 +1297,12 @@ async function backfillChart() {
       dayGL += (lastKnown[sym] - pc) * portfolio[sym].shares;
       hasAny = true;
     });
-    if (hasAny) pushChartPoint(dayGL, new Date(t * 1000), true);
+    if (hasAny) pushChartPoint(dayGL, new Date(t), true);
   });
 
   const count = allTimes.length;
-  document.getElementById('chart-sub').textContent = `Market open · ${count} min loaded`;
+  document.getElementById('chart-sub').textContent = `Market open · ${count} data points loaded`;
+  console.log('backfillChart: done,', count, 'time points');
 }
 
 function renderChart() {
@@ -2283,14 +2296,17 @@ function scheduleNextPoll() {
 function showKeyModal() {
   const el = document.getElementById('key-modal-input');
   el.value = apiKey || '';
+  document.getElementById('av-key-input').value = avKey || '';
   document.getElementById('key-modal').classList.add('open');
   setTimeout(() => el.focus(), 50);
 }
 function closeKeyModal() { document.getElementById('key-modal').classList.remove('open'); }
 function connectFromModal() {
   const val = document.getElementById('key-modal-input').value.trim();
+  const avVal = document.getElementById('av-key-input').value.trim();
   if (!val) return;
   document.getElementById('api-key').value = val;
+  if (avVal) { avKey = avVal; localStorage.setItem('av_key', avKey); }
   closeKeyModal();
   connect();
 }
