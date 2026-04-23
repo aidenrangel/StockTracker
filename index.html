@@ -665,6 +665,8 @@ function renderPortfolio() {
     const { sym, pos, isCash, price, mktVal, gl, glPct, dayGL, dayPct } = r;
     const glD = dir(gl), dayD = dir(dayGL);
     const tr = document.createElement('tr');
+    if (!isCash) tr.style.cursor = 'pointer';
+    if (!isCash) tr.onclick = () => showCompanyInfo(sym);
     if (isCash) {
       tr.innerHTML = `
         <td><div class="td-sym" style="color:var(--text2)">CASH</div><div class="td-name">Cash balance</div></td>
@@ -688,7 +690,7 @@ function renderPortfolio() {
         <td class="td-mono ${glD}">${gl != null ? fs$(gl) : '—'}</td>
         <td>${glPct != null ? `<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
         <td>${ytdPct != null ? `<span class="pill ${ytdD}">${arr(ytdD)} ${fp(ytdPct)}</span>` : '<span style="color:var(--text3);font-size:11px">…</span>'}</td>
-        <td><button class="btn sm" onclick="openEdit('${sym}')">Edit</button></td>`;
+        <td><button class="btn sm" onclick="event.stopPropagation();openEdit('${sym}')">Edit</button></td>`;
     }
     tbody.appendChild(tr);
   });
@@ -765,6 +767,7 @@ function renderRoth() {
   stockRows.sort((a,b)=>{ const va=gv(a),vb=gv(b); return typeof va==='string'?va.localeCompare(vb)*rSortDirV:(va-vb)*rSortDirV; });
   [...stockRows,...cashRows].forEach(({sym,pos,isCash,price,mktVal,gl,glPct,dayGL,dayPct})=>{
     const glD=dir(gl),dayD=dir(dayGL),tr=document.createElement('tr');
+    if(!isCash){tr.style.cursor='pointer';tr.onclick=()=>showCompanyInfo(sym);}
     if(isCash){
       tr.innerHTML=`<td><div class="td-sym" style="color:var(--text2)">CASH</div><div class="td-name">Cash balance</div></td>
         <td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td><td style="color:var(--text3)">—</td>
@@ -780,7 +783,7 @@ function renderRoth() {
         <td class="td-mono ${glD}">${gl!=null?fs$(gl):'—'}</td>
         <td>${glPct!=null?`<span class="pill ${glD}">${arr(glD)} ${fp(glPct)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
         <td>${ytdPct!=null?`<span class="pill ${ytdD}">${arr(ytdD)} ${fp(ytdPct)}</span>`:'<span style="color:var(--text3);font-size:11px">…</span>'}</td>
-        <td><button class="btn sm" onclick="rOpenEdit('${sym}')">Edit</button></td>`;
+        <td><button class="btn sm" onclick="event.stopPropagation();rOpenEdit('${sym}')">Edit</button></td>`;
     }
     tbody.appendChild(tr);
   });
