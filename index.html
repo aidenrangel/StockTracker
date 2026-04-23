@@ -1237,7 +1237,7 @@ function pushChartPoint(val, t = null, seeded = false) {
   renderChart();
 }
 
-// Backfill chart from 9:30 AM ET using Tiingo 5-min intraday
+// Backfill chart from 4 AM ET (pre-market) using Tiingo 5-min intraday
 async function backfillChart() {
   if (!tiingoKey) return;
   const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
@@ -1250,7 +1250,7 @@ async function backfillChart() {
   await Promise.all(stockSyms.map(async sym => {
     try {
       const r = await fetch(
-        `${TIINGO_PROXY}/iex/${sym}/prices?startDate=${today}&resampleFreq=5min&token=${tiingoKey}`,
+        `${TIINGO_PROXY}/iex/${sym}/prices?startDate=${today}&resampleFreq=5min&afterHours=true&token=${tiingoKey}`,
         { headers: { 'Authorization': `Token ${tiingoKey}` } }
       );
       const d = await r.json();
@@ -1317,25 +1317,44 @@ function renderChart() {
 
   const fmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   document.getElementById('chart-sub').textContent = `${fmt(portHistory[0].t)} → ${fmt(portHistory[portHistory.length - 1].t)}`;
-  const labels = portHistory.map(p => fmt(p.t));
+
+  // Fixed day window: 4 AM → 8 PM ET, regardless of current time
+  const now = new Date();
+  const etStr = now.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+  const dayStart = new Date(`${etStr} 04:00:00 EST`);
+  const dayEnd   = new Date(`${etStr} 20:00:00 EST`);
+  // Use actual data extent if it falls outside window
+  const minT = Math.min(dayStart.getTime(), portHistory[0].t.getTime());
+  const maxT = Math.max(dayEnd.getTime(), portHistory[portHistory.length - 1].t.getTime());
+
+  const data = portHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
 
   const ctx = document.getElementById('port-chart').getContext('2d');
   if (portChart) {
-    portChart.data.labels = labels;
-    portChart.data.datasets[0].data = vals;
+    portChart.data.datasets[0].data = data;
     portChart.data.datasets[0].borderColor = color;
     portChart.data.datasets[0].backgroundColor = colorBg;
+    portChart.options.scales.x.min = minT;
+    portChart.options.scales.x.max = maxT;
     portChart.update('none');
     return;
   }
   portChart = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: [{ data: vals, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
+    data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y) }, displayColors: false } },
       scales: {
-        x: { ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { display: false }, border: { display: false } },
+        x: {
+          type: 'linear',
+          min: minT, max: maxT,
+          ticks: {
+            color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0,
+            callback: v => { const d = new Date(v); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+          },
+          grid: { display: false }, border: { display: false }
+        },
         y: { position: 'right',
           ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v); const s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
           grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
@@ -1381,24 +1400,41 @@ function renderOvChart() {
   deltaEl.style.color = valEl.style.color;
   const fmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   document.getElementById('ov-chart-sub').textContent = `${fmt(ovHistory[0].t)} → ${fmt(ovHistory[ovHistory.length - 1].t)}`;
-  const labels = ovHistory.map(p => fmt(p.t));
+
+  const now = new Date();
+  const etStr = now.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+  const dayStart = new Date(`${etStr} 04:00:00 EST`);
+  const dayEnd   = new Date(`${etStr} 20:00:00 EST`);
+  const minT = Math.min(dayStart.getTime(), ovHistory[0].t.getTime());
+  const maxT = Math.max(dayEnd.getTime(), ovHistory[ovHistory.length - 1].t.getTime());
+  const data = ovHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+
   const ctx = document.getElementById('ov-chart').getContext('2d');
   if (ovChart) {
-    ovChart.data.labels = labels;
-    ovChart.data.datasets[0].data = vals;
+    ovChart.data.datasets[0].data = data;
     ovChart.data.datasets[0].borderColor = color;
     ovChart.data.datasets[0].backgroundColor = colorBg;
+    ovChart.options.scales.x.min = minT;
+    ovChart.options.scales.x.max = maxT;
     ovChart.update('none');
     return;
   }
   ovChart = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: [{ data: vals, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
+    data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y) }, displayColors: false } },
       scales: {
-        x: { ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { display: false }, border: { display: false } },
+        x: {
+          type: 'linear',
+          min: minT, max: maxT,
+          ticks: {
+            color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0,
+            callback: v => { const d = new Date(v); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+          },
+          grid: { display: false }, border: { display: false }
+        },
         y: { position: 'right',
           ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v); const s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
           grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
