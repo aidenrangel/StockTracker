@@ -1208,12 +1208,22 @@ function renderChips() {
   const wrap = document.getElementById('watchlist-chips');
   wrap.innerHTML = '';
   watchlist.forEach(sym => {
-    const btn = document.createElement('button');
-    btn.className = 'chip' + (activeMarketSym === sym ? ' active' : '');
-    btn.textContent = sym;
-    btn.onclick = () => { activeMarketSym = sym; renderMarket(); renderChips(); };
-    wrap.appendChild(btn);
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (activeMarketSym === sym ? ' active' : '');
+    chip.style.display = 'inline-flex';
+    chip.style.alignItems = 'center';
+    chip.style.gap = '5px';
+    chip.innerHTML = `<span onclick="activeMarketSym='${sym}';renderMarket();renderChips();">${sym}</span><span onclick="removeFromWatchlist('${sym}')" style="opacity:.5;cursor:pointer;font-size:10px;line-height:1" title="Remove">✕</span>`;
+    wrap.appendChild(chip);
   });
+}
+
+function removeFromWatchlist(sym) {
+  watchlist = watchlist.filter(s => s !== sym);
+  save();
+  if (activeMarketSym === sym) activeMarketSym = null;
+  renderMarket();
+  renderChips();
 }
 
 // ═══ POSITION MANAGEMENT ═══
