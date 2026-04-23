@@ -178,15 +178,16 @@ tbody td:first-child{text-align:left}
 .flat{color:var(--text2)}
 
 /* heatmap */
-.heatmap-sector{margin-bottom:12px}
+.heatmap-sector{display:flex;flex-direction:column}
+.heatmap-sector-inner{aspect-ratio:1;display:flex;flex-direction:column;min-height:0}
 #heatmap-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start}
 .sector-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.sector-tiles{display:flex;flex-wrap:wrap;gap:4px}
-.htile{border-radius:var(--r-md);padding:10px 12px;cursor:default;transition:opacity .15s;min-width:80px;flex:1;position:relative;overflow:hidden}
+.sector-tiles{display:flex;flex-wrap:wrap;gap:3px;flex:1}
+.htile{border-radius:var(--r-md);padding:8px;cursor:default;transition:opacity .15s;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;min-width:0;min-height:40px}
 .htile:hover{opacity:.85}
-.htile .ht-sym{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;line-height:1;margin-bottom:4px}
-.htile .ht-pct{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;line-height:1}
-.htile .ht-price{font-size:10px;margin-top:3px;opacity:.75}
+.htile .ht-sym{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;line-height:1;margin-bottom:3px}
+.htile .ht-pct{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;line-height:1}
+.htile .ht-price{font-size:10px;margin-top:2px;opacity:.75}
 
 footer{text-align:center;font-size:11px;color:var(--text3);padding:2rem 0 1.5rem}
 footer a{color:var(--text2)}
@@ -1172,7 +1173,7 @@ function renderMarket() {
   sorted.forEach(([sector, syms]) => {
     const sectorEl = document.createElement('div');
     sectorEl.className = 'heatmap-sector';
-    sectorEl.innerHTML = `<div class="sector-label">${sector}</div><div class="sector-tiles"></div>`;
+    sectorEl.innerHTML = `<div class="sector-label">${sector}</div><div style="aspect-ratio:1;display:flex;flex-direction:column;"><div class="sector-tiles" style="flex:1"></div></div>`;
     wrap.appendChild(sectorEl);
 
     const tilesEl = sectorEl.querySelector('.sector-tiles');
@@ -1186,13 +1187,15 @@ function renderMarket() {
       const pct = (q && pc) ? ((q.c - pc) / pc) * 100 : null;
       const { bg, text } = heatColor(pct);
       const w = marketCapCache[sym] || 100;
-      const flexGrow = Math.max(1, Math.round((w / totalW) * 20));
+      // Width as % of sector total so tiles fill the square container
+      const widthPct = Math.max(10, (w / totalW) * 100).toFixed(1);
 
       const tile = document.createElement('div');
       tile.className = 'htile';
       tile.style.background = bg;
       tile.style.color = text;
-      tile.style.flexGrow = flexGrow;
+      tile.style.flexGrow = widthPct;
+      tile.style.flexBasis = widthPct + '%';
       tile.innerHTML = `
         <div class="ht-sym">${sym}</div>
         <div class="ht-pct">${pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : '—'}</div>
