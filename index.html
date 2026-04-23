@@ -1205,8 +1205,11 @@ function pushChartPoint(val, t = null, seeded = false) {
   if (!seeded && last && Math.abs(last.v - val) < 0.01 && (now - last.t) < 5000) return;
   portHistory.push({ t: now, v: val });
   if (portHistory.length > 400) portHistory.shift();
-  // Persist to sessionStorage so chart survives page refresh
-  try { sessionStorage.setItem('port_history', JSON.stringify(portHistory.map(p => ({ t: p.t.getTime(), v: p.v })))); } catch(e) {}
+  // Persist to localStorage so chart survives page refresh/reopen same day
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    localStorage.setItem('port_history', JSON.stringify({ date: today, pts: portHistory.map(p => ({ t: p.t.getTime(), v: p.v })) }));
+  } catch(e) {}
   renderChart();
 }
 
@@ -2272,17 +2275,18 @@ document.getElementById('key-modal-input').addEventListener('keydown', e => { if
 
 // ═══ INIT ═══
 if (apiKey) document.getElementById('api-key').value = apiKey;
-// Restore chart history from session storage (survives page refresh)
+// Restore chart history from localStorage (persists same-day across reloads)
 try {
-  const saved = sessionStorage.getItem('port_history');
+  const saved = localStorage.getItem('port_history');
   if (saved) {
-    const pts = JSON.parse(saved);
-    const today = new Date(); today.setHours(0,0,0,0);
-    pts.forEach(p => {
-      const t = new Date(p.t);
-      if (t >= today) portHistory.push({ t, v: p.v }); // only today's data
-    });
-    if (portHistory.length > 1) renderChart();
+    const { date, pts } = JSON.parse(saved);
+    const today = new Date().toISOString().split('T')[0];
+    if (date === today && pts?.length > 1) {
+      pts.forEach(p => portHistory.push({ t: new Date(p.t), v: p.v }));
+      renderChart();
+    } else {
+      localStorage.removeItem('port_history'); // stale, clear it
+    }
   }
 } catch(e) {}
 
