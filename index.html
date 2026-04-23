@@ -1787,7 +1787,8 @@ async function fetchTiingoQuote(sym) {
   if (!tiingoKey || sym === 'CASH') return;
   try {
     const r = await fetch(`https://api.tiingo.com/iex/${sym}?token=${tiingoKey}`);
-    const d = await r.json();
+    const arr = await r.json();
+    const d = Array.isArray(arr) ? arr[0] : arr;
     if (d && d.tngoLast != null) {
       quotes[sym] = {
         c: d.tngoLast,
