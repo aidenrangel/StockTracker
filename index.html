@@ -1246,10 +1246,13 @@ function getLastTradingDate() {
   let daysBack = 0;
   if (day === 0) daysBack = 2; // Sunday → Friday
   else if (day === 6) daysBack = 1; // Saturday → Friday
-  // If Monday before 9:30 AM ET, use Friday
   else if (day === 1 && (et.getHours() * 60 + et.getMinutes()) < 9 * 60 + 30) daysBack = 3;
   et.setDate(et.getDate() - daysBack);
-  return et.toISOString().split('T')[0];
+  // Format as YYYY-MM-DD in ET (NOT toISOString which converts to UTC)
+  const y = et.getFullYear();
+  const m = String(et.getMonth() + 1).padStart(2, '0');
+  const d = String(et.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 // Backfill chart from 4 AM ET (pre-market) using Tiingo 5-min intraday
