@@ -2076,6 +2076,7 @@ async function fetchYTD(sym) {
         // price = ytdStart * (1 + ytdPct/100)  =>  ytdStart = price / (1 + ytdPct/100)
         ytdClose[sym] = q.c / (1 + ytdPct / 100);
         renderPortfolio();
+        renderRoth();
       }
     }
   } catch (e) { console.error('fetchYTD', sym, e); }
