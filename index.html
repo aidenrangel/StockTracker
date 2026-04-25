@@ -2574,6 +2574,8 @@ function connect() {
     await backfillChart(); // only runs once on connect
     backfilling = false;
     renderChart();
+    rRenderChart();
+    renderOvChart();
     if (open) scheduleNextPoll();
   });
 
