@@ -338,14 +338,15 @@ footer a{color:var(--text2)}
       </table>
     </div>
 
-    <div class="panel" id="port-earnings-panel" style="display:none">
-      <div class="panel-title">Upcoming Earnings</div>
-      <div id="port-earnings-body"></div>
-    </div>
-
-    <div class="panel" id="port-insider-panel" style="display:none">
-      <div class="panel-title">Recent Insider Transactions</div>
-      <div id="port-insider-body"></div>
+    <div id="port-panels-row" style="display:none;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.25rem">
+      <div class="panel" id="port-earnings-panel" style="margin:0">
+        <div class="panel-title">Upcoming Earnings</div>
+        <div id="port-earnings-body"></div>
+      </div>
+      <div class="panel" id="port-insider-panel" style="margin:0">
+        <div class="panel-title">Recent Insider Transactions</div>
+        <div id="port-insider-body"></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -413,14 +414,15 @@ footer a{color:var(--text2)}
       </table>
     </div>
 
-    <div class="panel" id="roth-earnings-panel" style="display:none">
-      <div class="panel-title">Upcoming Earnings</div>
-      <div id="roth-earnings-body"></div>
-    </div>
-
-    <div class="panel" id="roth-insider-panel" style="display:none">
-      <div class="panel-title">Recent Insider Transactions</div>
-      <div id="roth-insider-body"></div>
+    <div id="roth-panels-row" style="display:none;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.25rem">
+      <div class="panel" id="roth-earnings-panel" style="margin:0">
+        <div class="panel-title">Upcoming Earnings</div>
+        <div id="roth-earnings-body"></div>
+      </div>
+      <div class="panel" id="roth-insider-panel" style="margin:0">
+        <div class="panel-title">Recent Insider Transactions</div>
+        <div id="roth-insider-body"></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -2304,6 +2306,16 @@ function renderEarnings() {
   renderEarningsFor('roth', Object.keys(rPortfolio).filter(s => s !== 'CASH'));
 }
 
+// Show row wrapper only if at least one child panel is visible
+function updatePanelsRow(prefix) {
+  const row = document.getElementById(prefix + '-panels-row');
+  if (!row) return;
+  const ep = document.getElementById(prefix + '-earnings-panel');
+  const ip = document.getElementById(prefix + '-insider-panel');
+  const eitherVisible = (ep && ep.style.display !== 'none') || (ip && ip.style.display !== 'none');
+  row.style.display = eitherVisible ? 'grid' : 'none';
+}
+
 function renderEarningsFor(prefix, syms) {
   const panel = document.getElementById(prefix + '-earnings-panel');
   const body = document.getElementById(prefix + '-earnings-body');
@@ -2322,8 +2334,9 @@ function renderEarningsFor(prefix, syms) {
     .filter(r => r && r.daysAway >= 0)
     .sort((a, b) => a.daysAway - b.daysAway);
 
-  if (!rows.length) { panel.style.display = 'none'; return; }
+  if (!rows.length) { panel.style.display = 'none'; updatePanelsRow(prefix); return; }
   panel.style.display = '';
+  updatePanelsRow(prefix);
 
   body.innerHTML = rows.map(r => {
     const dateStr = r.eDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -2390,8 +2403,9 @@ function renderInsiderFor(prefix, syms) {
   all.sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
   const rows = all.slice(0, 15);
 
-  if (!rows.length) { panel.style.display = 'none'; return; }
+  if (!rows.length) { panel.style.display = 'none'; updatePanelsRow(prefix); return; }
   panel.style.display = '';
+  updatePanelsRow(prefix);
 
   body.innerHTML = rows.map(t => {
     const isBuy = t.change > 0;
