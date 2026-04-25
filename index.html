@@ -1174,14 +1174,32 @@ function rRenderChart(){
   dEl.textContent=(dp&&dp!=='—'?dp+' ':'')+' today'; dEl.style.color=valEl.style.color;
   const fmt=d=>d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   document.getElementById('r-chart-sub').textContent=`${fmt(rHistory[0].t)} → ${fmt(rHistory[rHistory.length-1].t)}`;
-  const labels=rHistory.map(p=>fmt(p.t));
+
+  const { dayEnd } = getDayWindow();
+  const firstT = rHistory[0].t.getTime();
+  const lastT  = rHistory[rHistory.length-1].t.getTime();
+  const minT = firstT;
+  const maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
+  const data = rHistory.map(p=>({x:p.t.getTime(),y:p.v}));
+
   const ctx=document.getElementById('r-chart').getContext('2d');
-  if(rChart){rChart.data.labels=labels;rChart.data.datasets[0].data=vals;rChart.data.datasets[0].borderColor=color;rChart.data.datasets[0].backgroundColor=colorBg;rChart.update('none');return;}
-  rChart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data:vals,borderColor:color,backgroundColor:colorBg,borderWidth:2,pointRadius:0,pointHoverRadius:4,fill:true,tension:0.3}]},
+  if(rChart){
+    rChart.data.datasets[0].data=data;
+    rChart.data.datasets[0].borderColor=color;
+    rChart.data.datasets[0].backgroundColor=colorBg;
+    rChart.options.scales.x.min=minT;
+    rChart.options.scales.x.max=maxT;
+    rChart.update('none');
+    return;
+  }
+  rChart=new Chart(ctx,{type:'line',data:{datasets:[{data,borderColor:color,backgroundColor:colorBg,borderWidth:2,pointRadius:0,pointHoverRadius:4,fill:true,tension:0.3}]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>' '+fs$(i.parsed.y)},displayColors:false}},
       scales:{
-        x:{ticks:{color:'rgba(160,157,148,.8)',font:{size:10},maxTicksLimit:6,maxRotation:0},grid:{display:false},border:{display:false}},
+        x:{type:'linear',min:minT,max:maxT,
+          ticks:{color:'rgba(160,157,148,.8)',font:{size:10},maxTicksLimit:6,maxRotation:0,
+            callback:v=>{const d=new Date(v);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}},
+          grid:{display:false},border:{display:false}},
         y:{position:'right',ticks:{color:'rgba(160,157,148,.8)',font:{size:10},maxTicksLimit:5,callback:v=>{const a=Math.abs(v),s=a>=1000?(a/1000).toFixed(1)+'k':a.toFixed(0);return(v>=0?'+$':'-$')+s;}},
           grid:{color:c=>c.tick.value===0?'rgba(160,157,148,.4)':'rgba(160,157,148,.08)',lineWidth:c=>c.tick.value===0?1.5:1,drawBorder:false},border:{display:false}}
       },animation:false}});
@@ -1264,8 +1282,12 @@ async function backfillChart() {
   const today = getLastTradingDate();
   console.log('backfillChart: Tiingo intraday, symbols=', stockSyms.length, 'date=', today);
 
+  const rothSyms = Object.keys(rPortfolio).filter(s => s !== 'CASH');
+
+  // Fetch all symbols needed (union of portfolio + roth, deduplicated)
+  const allSymsToFetch = [...new Set([...stockSyms, ...rothSyms])];
   const candleMap = {};
-  await Promise.all(stockSyms.map(async sym => {
+  await Promise.all(allSymsToFetch.map(async sym => {
     try {
       const r = await fetch(
         `${TIINGO_PROXY}/iex/${sym}/prices?startDate=${today}&resampleFreq=5min&afterHours=true&token=${tiingoKey}`,
@@ -1310,6 +1332,26 @@ async function backfillChart() {
     if (hasAny) portHistory.push({ t: new Date(t), v: dayGL });
   });
   if (portHistory.length > 400) portHistory.splice(0, portHistory.length - 400);
+
+  // Roth IRA backfill
+  if (rothSyms.length) {
+    const rothLastKnown = {};
+    rothSyms.forEach(sym => { rothLastKnown[sym] = prevClose[sym] ?? quotes[sym]?.pc ?? null; });
+    rHistory.length = 0;
+    allTimes.forEach(t => {
+      let dayGL = 0, hasAny = false;
+      rothSyms.forEach(sym => {
+        const pc = prevClose[sym] ?? quotes[sym]?.pc;
+        if (pc == null) return;
+        if (candleMap[sym]?.[t] != null) rothLastKnown[sym] = candleMap[sym][t];
+        if (rothLastKnown[sym] == null) return;
+        dayGL += (rothLastKnown[sym] - pc) * rPortfolio[sym].shares;
+        hasAny = true;
+      });
+      if (hasAny) rHistory.push({ t: new Date(t), v: dayGL });
+    });
+    if (rHistory.length > 400) rHistory.splice(0, rHistory.length - 400);
+  }
 
   console.log('backfillChart: done,', allTimes.length, 'points');
 }
@@ -1369,10 +1411,10 @@ function renderChart() {
   document.getElementById('chart-sub').textContent = `${fmt(portHistory[0].t)} → ${fmt(portHistory[portHistory.length - 1].t)}`;
 
   // Fixed day window: 4 AM → 8 PM ET
-  const { dayStart, dayEnd } = getDayWindow();
+  const { dayEnd } = getDayWindow();
   const firstT = portHistory[0].t.getTime();
   const lastT  = portHistory[portHistory.length - 1].t.getTime();
-  const minT = Math.min(dayStart, firstT);
+  const minT = firstT;
   // Only extend to 8 PM if we're currently in an active session (today is a trading day)
   const maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000; // +5 min buffer
 
@@ -1450,10 +1492,10 @@ function renderOvChart() {
   const fmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   document.getElementById('ov-chart-sub').textContent = `${fmt(ovHistory[0].t)} → ${fmt(ovHistory[ovHistory.length - 1].t)}`;
 
-  const { dayStart, dayEnd } = getDayWindow();
+  const { dayEnd } = getDayWindow();
   const firstT = ovHistory[0].t.getTime();
   const lastT  = ovHistory[ovHistory.length - 1].t.getTime();
-  const minT = Math.min(dayStart, firstT);
+  const minT = firstT;
   const maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
   const data = ovHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
 
