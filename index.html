@@ -1239,13 +1239,26 @@ function pushChartPoint(val, t = null, seeded = false) {
   if (!backfilling) renderChart();
 }
 
+// Returns the most recent trading day as YYYY-MM-DD
+function getLastTradingDate() {
+  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = et.getDay(); // 0=Sun, 1=Mon...6=Sat
+  let daysBack = 0;
+  if (day === 0) daysBack = 2; // Sunday → Friday
+  else if (day === 6) daysBack = 1; // Saturday → Friday
+  // If Monday before 9:30 AM ET, use Friday
+  else if (day === 1 && (et.getHours() * 60 + et.getMinutes()) < 9 * 60 + 30) daysBack = 3;
+  et.setDate(et.getDate() - daysBack);
+  return et.toISOString().split('T')[0];
+}
+
 // Backfill chart from 4 AM ET (pre-market) using Tiingo 5-min intraday
 async function backfillChart() {
   if (!tiingoKey) return;
   const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
   if (!stockSyms.length) return;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLastTradingDate();
   console.log('backfillChart: Tiingo intraday, symbols=', stockSyms.length, 'date=', today);
 
   const candleMap = {};
@@ -1300,32 +1313,38 @@ async function backfillChart() {
 
 // Get today's 4 AM and 8 PM ET as UTC ms timestamps — works in any local timezone
 function getDayWindow() {
-  // Get today's date in ET timezone as YYYY-MM-DD
-  const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-  // Parse 4 AM and 8 PM ET directly — Date will handle DST correctly
-  const dayStart = new Date(new Date(`${etDate}T04:00:00`).toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET').getTime();
-  // Simpler: use the offset between now's UTC and ET
+  // Anchor to last trading day so weekends show Friday's window
+  const tradingDate = getLastTradingDate(); // e.g. "2026-04-25"
   const now = new Date();
   const etNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const offsetMs = now - etNow; // ms to add to ET local time to get UTC
-  const etMidnight = new Date(`${etDate}T00:00:00`).getTime();
+  const offsetMs = now.getTime() - etNow.getTime();
+  const etMidnight = new Date(tradingDate + 'T00:00:00').getTime();
   return {
-    dayStart: etMidnight + 4  * 3600000 + offsetMs,
-    dayEnd:   etMidnight + 20 * 3600000 + offsetMs
+    dayStart: etMidnight + 4  * 3600000 + offsetMs, // 4 AM ET
+    dayEnd:   etMidnight + 20 * 3600000 + offsetMs  // 8 PM ET
   };
 }
 
 function renderChart() {
   const wrap = document.getElementById('chart-panel');
-  if (portHistory.length < 2) {
-    // Show panel with loading message if we're still loading, hide if no data at all
-    if (backfilling) { wrap.style.display = ''; } else { wrap.style.display = 'none'; }
-    return;
-  }
-  // Show panel, hide loading, show canvas
-  wrap.style.display = '';
   const loading = document.getElementById('chart-loading');
   const canvasWrap = document.querySelector('#chart-panel canvas')?.parentElement;
+
+  if (backfilling) {
+    wrap.style.display = '';
+    if (loading) loading.style.display = '';
+    if (canvasWrap) canvasWrap.style.display = 'none';
+    return;
+  }
+
+  // Need at least 2 points to draw a meaningful chart
+  if (portHistory.length < 2) {
+    wrap.style.display = 'none';
+    return;
+  }
+
+  // Show panel, hide loading, show canvas
+  wrap.style.display = '';
   if (loading) loading.style.display = 'none';
   if (canvasWrap) canvasWrap.style.display = '';
 
