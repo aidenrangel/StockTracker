@@ -316,7 +316,8 @@ footer a{color:var(--text2)}
           <div class="chart-delta" id="chart-delta"></div>
         </div>
       </div>
-      <div style="height:180px;position:relative"><canvas id="port-chart"></canvas></div>
+      <div id="chart-loading" style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px;letter-spacing:.5px">Loading chart…</div>
+      <div style="height:180px;position:relative;display:none"><canvas id="port-chart"></canvas></div>
     </div>
 
     <div class="table-wrap">
@@ -1240,11 +1241,9 @@ function pushChartPoint(val, t = null, seeded = false) {
 
 // Backfill chart from 4 AM ET (pre-market) using Tiingo 5-min intraday
 async function backfillChart() {
-  if (!tiingoKey) return;
+  if (!tiingoKey) { backfilling = false; renderChart(); return; }
   const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
-  if (!stockSyms.length) return;
-
-  backfilling = true; // suppress chart renders during load
+  if (!stockSyms.length) { backfilling = false; renderChart(); return; }
 
   const today = new Date().toISOString().split('T')[0];
   console.log('backfillChart: Tiingo intraday, symbols=', stockSyms.length, 'date=', today);
@@ -1306,22 +1305,31 @@ function getDayWindow() {
   // Get today's date in ET timezone as YYYY-MM-DD
   const etDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
   // Parse 4 AM and 8 PM ET directly — Date will handle DST correctly
-  const dayStart = new Date(new Date(`${etDate}T08:00:00`).toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET').getTime();
+  const dayStart = new Date(new Date(`${etDate}T04:00:00`).toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET').getTime();
   // Simpler: use the offset between now's UTC and ET
   const now = new Date();
   const etNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const offsetMs = now - etNow; // ms to add to ET local time to get UTC
   const etMidnight = new Date(`${etDate}T00:00:00`).getTime();
   return {
-    dayStart: etMidnight + 8  * 3600000 + offsetMs,
+    dayStart: etMidnight + 4  * 3600000 + offsetMs,
     dayEnd:   etMidnight + 20 * 3600000 + offsetMs
   };
 }
 
 function renderChart() {
   const wrap = document.getElementById('chart-panel');
-  if (portHistory.length < 2) { wrap.style.display = 'none'; return; }
+  if (portHistory.length < 2) {
+    // Show panel with loading message if we're still loading, hide if no data at all
+    if (backfilling) { wrap.style.display = ''; } else { wrap.style.display = 'none'; }
+    return;
+  }
+  // Show panel, hide loading, show canvas
   wrap.style.display = '';
+  const loading = document.getElementById('chart-loading');
+  const canvasWrap = document.querySelector('#chart-panel canvas')?.parentElement;
+  if (loading) loading.style.display = 'none';
+  if (canvasWrap) canvasWrap.style.display = '';
 
   const vals = portHistory.map(p => p.v);
   const last = vals[vals.length - 1];
@@ -2435,6 +2443,12 @@ function connect() {
 
   const open = isExtendedHours();
   setBadge(open ? (isMarketOpen() ? 'poll' : 'poll') : 'closed');
+
+  // Suppress chart until all data + backfill is ready
+  backfilling = true;
+  // Show chart panel immediately with loading indicator
+  const cp = document.getElementById('chart-panel');
+  if (cp) cp.style.display = '';
 
   // Fetch quotes → prev closes → YTD → sectors → earnings → insiders → backfill
   fetchAll().then(async () => {
