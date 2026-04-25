@@ -1370,8 +1370,11 @@ function renderChart() {
 
   // Fixed day window: 4 AM → 8 PM ET
   const { dayStart, dayEnd } = getDayWindow();
-  const minT = Math.min(dayStart, portHistory[0].t.getTime());
-  const maxT = Math.max(dayEnd,   portHistory[portHistory.length - 1].t.getTime());
+  const firstT = portHistory[0].t.getTime();
+  const lastT  = portHistory[portHistory.length - 1].t.getTime();
+  const minT = Math.min(dayStart, firstT);
+  // Only extend to 8 PM if we're currently in an active session (today is a trading day)
+  const maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000; // +5 min buffer
 
   const data = portHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
 
@@ -1448,8 +1451,10 @@ function renderOvChart() {
   document.getElementById('ov-chart-sub').textContent = `${fmt(ovHistory[0].t)} → ${fmt(ovHistory[ovHistory.length - 1].t)}`;
 
   const { dayStart, dayEnd } = getDayWindow();
-  const minT = Math.min(dayStart, ovHistory[0].t.getTime());
-  const maxT = Math.max(dayEnd,   ovHistory[ovHistory.length - 1].t.getTime());
+  const firstT = ovHistory[0].t.getTime();
+  const lastT  = ovHistory[ovHistory.length - 1].t.getTime();
+  const minT = Math.min(dayStart, firstT);
+  const maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
   const data = ovHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
 
   const ctx = document.getElementById('ov-chart').getContext('2d');
