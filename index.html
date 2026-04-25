@@ -1241,9 +1241,9 @@ function pushChartPoint(val, t = null, seeded = false) {
 
 // Backfill chart from 4 AM ET (pre-market) using Tiingo 5-min intraday
 async function backfillChart() {
-  if (!tiingoKey) { backfilling = false; renderChart(); return; }
+  if (!tiingoKey) return;
   const stockSyms = Object.keys(portfolio).filter(s => s !== 'CASH');
-  if (!stockSyms.length) { backfilling = false; renderChart(); return; }
+  if (!stockSyms.length) return;
 
   const today = new Date().toISOString().split('T')[0];
   console.log('backfillChart: Tiingo intraday, symbols=', stockSyms.length, 'date=', today);
@@ -1269,13 +1269,13 @@ async function backfillChart() {
     } catch(e) { console.error('backfillChart Tiingo error', sym, e); }
   }));
 
-  if (!Object.keys(candleMap).length) { console.log('backfillChart: no data returned'); backfilling = false; return; }
+  if (!Object.keys(candleMap).length) { console.log('backfillChart: no data returned'); return; }
 
   const allTimes = [...new Set(
     Object.values(candleMap).flatMap(m => Object.keys(m).map(Number))
   )].sort((a, b) => a - b);
 
-  if (!allTimes.length) { backfilling = false; return; }
+  if (!allTimes.length) return;
 
   const lastKnown = {};
   stockSyms.forEach(sym => { lastKnown[sym] = prevClose[sym] ?? quotes[sym]?.pc ?? null; });
@@ -1291,13 +1291,11 @@ async function backfillChart() {
       dayGL += (lastKnown[sym] - pc) * portfolio[sym].shares;
       hasAny = true;
     });
-    if (hasAny) pushChartPoint(dayGL, new Date(t), true);
+    if (hasAny) portHistory.push({ t: new Date(t), v: dayGL });
   });
+  if (portHistory.length > 400) portHistory.splice(0, portHistory.length - 400);
 
-  document.getElementById('chart-sub').textContent = `Market open · ${allTimes.length} points loaded`;
   console.log('backfillChart: done,', allTimes.length, 'points');
-  backfilling = false;
-  renderChart(); // single render once all data is ready
 }
 
 // Get today's 4 AM and 8 PM ET as UTC ms timestamps — works in any local timezone
@@ -2458,7 +2456,9 @@ function connect() {
     const allPortSyms = [...new Set([...Object.keys(portfolio), ...Object.keys(rPortfolio)].filter(s => s !== 'CASH'))];
     fetchAllEarnings(allPortSyms);
     fetchAllInsiders(allPortSyms);
-    await backfillChart();
+    await backfillChart(); // only runs once on connect
+    backfilling = false;
+    renderChart();
     if (open) scheduleNextPoll();
   });
 
