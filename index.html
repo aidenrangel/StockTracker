@@ -134,7 +134,7 @@ tbody td:first-child{text-align:left}
 .insider-sym{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;width:52px;flex-shrink:0}
 .insider-name{font-size:12px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .insider-title{font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0}
-.insider-val{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0}
+.insider-val{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .insider-date{font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0}
 .insider-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:700;flex-shrink:0}
 .earnings-row:last-child{border-bottom:none}
@@ -338,12 +338,12 @@ footer a{color:var(--text2)}
       </table>
     </div>
 
-    <div id="port-panels-row" style="display:none;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.25rem">
-      <div class="panel" id="port-earnings-panel" style="margin:0">
+    <div id="port-panels-row" style="display:none;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.25rem;min-width:0">
+      <div class="panel" id="port-earnings-panel" style="margin:0;flex:1;min-width:0">
         <div class="panel-title">Upcoming Earnings</div>
         <div id="port-earnings-body"></div>
       </div>
-      <div class="panel" id="port-insider-panel" style="margin:0">
+      <div class="panel" id="port-insider-panel" style="margin:0;flex:1;min-width:0">
         <div class="panel-title">Recent Insider Transactions</div>
         <div id="port-insider-body"></div>
       </div>
@@ -414,12 +414,12 @@ footer a{color:var(--text2)}
       </table>
     </div>
 
-    <div id="roth-panels-row" style="display:none;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.25rem">
-      <div class="panel" id="roth-earnings-panel" style="margin:0">
+    <div id="roth-panels-row" style="display:none;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.25rem;min-width:0">
+      <div class="panel" id="roth-earnings-panel" style="margin:0;flex:1;min-width:0">
         <div class="panel-title">Upcoming Earnings</div>
         <div id="roth-earnings-body"></div>
       </div>
-      <div class="panel" id="roth-insider-panel" style="margin:0">
+      <div class="panel" id="roth-insider-panel" style="margin:0;flex:1;min-width:0">
         <div class="panel-title">Recent Insider Transactions</div>
         <div id="roth-insider-body"></div>
       </div>
