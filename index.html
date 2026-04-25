@@ -391,7 +391,8 @@ footer a{color:var(--text2)}
           <div class="chart-delta" id="r-chart-delta"></div>
         </div>
       </div>
-      <div style="height:180px;position:relative"><canvas id="r-chart"></canvas></div>
+      <div id="r-chart-loading" style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px;letter-spacing:.5px">Loading chart…</div>
+      <div style="height:180px;position:relative;display:none"><canvas id="r-chart"></canvas></div>
     </div>
 
     <div class="table-wrap">
@@ -534,7 +535,8 @@ footer a{color:var(--text2)}
           <div class="chart-delta" id="ov-chart-delta"></div>
         </div>
       </div>
-      <div style="height:180px;position:relative"><canvas id="ov-chart"></canvas></div>
+      <div id="ov-chart-loading" style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px;letter-spacing:.5px">Loading chart…</div>
+      <div style="height:180px;position:relative;display:none"><canvas id="ov-chart"></canvas></div>
     </div>
 
     <!-- Side-by-side account cards -->
@@ -1162,47 +1164,65 @@ function rPushChart(val,t=null,seeded=false){
   rRenderChart();
 }
 
-function rRenderChart(){
-  const wrap=document.getElementById('r-chart-panel');
-  if(rHistory.length<2){wrap.style.display='none';return;}
-  wrap.style.display='';
-  const vals=rHistory.map(p=>p.v), last=vals[vals.length-1], isUp=last>=0;
-  const color=isUp?'#1a9470':'#d94545', colorBg=isUp?'rgba(26,148,112,.07)':'rgba(217,69,69,.07)';
-  const valEl=document.getElementById('r-chart-val');
-  valEl.textContent=fs$(last); valEl.style.color=isUp?'var(--green-text)':'var(--red-text)';
-  const dEl=document.getElementById('r-chart-delta'), dp=document.getElementById('r-sum-day-pct')?.textContent||'';
-  dEl.textContent=(dp&&dp!=='—'?dp+' ':'')+' today'; dEl.style.color=valEl.style.color;
-  const fmt=d=>d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  document.getElementById('r-chart-sub').textContent=`${fmt(rHistory[0].t)} → ${fmt(rHistory[rHistory.length-1].t)}`;
+function rRenderChart() {
+  const wrap = document.getElementById('r-chart-panel');
+  const loading = document.getElementById('r-chart-loading');
+  const canvasWrap = document.querySelector('#r-chart-panel canvas')?.parentElement;
+
+  if (backfilling) {
+    wrap.style.display = '';
+    if (loading) loading.style.display = '';
+    if (canvasWrap) canvasWrap.style.display = 'none';
+    return;
+  }
+
+  if (rHistory.length < 2) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = '';
+  if (loading) loading.style.display = 'none';
+  if (canvasWrap) canvasWrap.style.display = '';
+
+  const vals = rHistory.map(p => p.v), last = vals[vals.length-1], isUp = last >= 0;
+  const color = isUp ? '#1a9470' : '#d94545', colorBg = isUp ? 'rgba(26,148,112,.07)' : 'rgba(217,69,69,.07)';
+  const valEl = document.getElementById('r-chart-val');
+  valEl.textContent = fs$(last); valEl.style.color = isUp ? 'var(--green-text)' : 'var(--red-text)';
+  const dEl = document.getElementById('r-chart-delta'), dp = document.getElementById('r-sum-day-pct')?.textContent || '';
+  dEl.textContent = (dp && dp !== '—' ? dp + ' ' : '') + 'today'; dEl.style.color = valEl.style.color;
+  const fmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('r-chart-sub').textContent = `${fmt(rHistory[0].t)} → ${fmt(rHistory[rHistory.length-1].t)}`;
 
   const { dayEnd } = getDayWindow();
-  const firstT = rHistory[0].t.getTime();
-  const lastT  = rHistory[rHistory.length-1].t.getTime();
-  const minT = firstT;
-  const maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
-  const data = rHistory.map(p=>({x:p.t.getTime(),y:p.v}));
+  const firstT = rHistory[0].t.getTime(), lastT = rHistory[rHistory.length-1].t.getTime();
+  const minT = firstT, maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
+  const data = rHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
 
-  const ctx=document.getElementById('r-chart').getContext('2d');
-  if(rChart){
-    rChart.data.datasets[0].data=data;
-    rChart.data.datasets[0].borderColor=color;
-    rChart.data.datasets[0].backgroundColor=colorBg;
-    rChart.options.scales.x.min=minT;
-    rChart.options.scales.x.max=maxT;
+  const ctx = document.getElementById('r-chart').getContext('2d');
+  if (rChart) {
+    rChart.data.datasets[0].data = data;
+    rChart.data.datasets[0].borderColor = color;
+    rChart.data.datasets[0].backgroundColor = colorBg;
+    rChart.options.scales.x.min = minT;
+    rChart.options.scales.x.max = maxT;
     rChart.update('none');
     return;
   }
-  rChart=new Chart(ctx,{type:'line',data:{datasets:[{data,borderColor:color,backgroundColor:colorBg,borderWidth:2,pointRadius:0,pointHoverRadius:4,fill:true,tension:0.3}]},
-    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>' '+fs$(i.parsed.y)},displayColors:false}},
-      scales:{
-        x:{type:'linear',min:minT,max:maxT,
-          ticks:{color:'rgba(160,157,148,.8)',font:{size:10},maxTicksLimit:6,maxRotation:0,
-            callback:v=>{const d=new Date(v);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}},
-          grid:{display:false},border:{display:false}},
-        y:{position:'right',ticks:{color:'rgba(160,157,148,.8)',font:{size:10},maxTicksLimit:5,callback:v=>{const a=Math.abs(v),s=a>=1000?(a/1000).toFixed(1)+'k':a.toFixed(0);return(v>=0?'+$':'-$')+s;}},
-          grid:{color:c=>c.tick.value===0?'rgba(160,157,148,.4)':'rgba(160,157,148,.08)',lineWidth:c=>c.tick.value===0?1.5:1,drawBorder:false},border:{display:false}}
-      },animation:false}});
+  rChart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y) }, displayColors: false } },
+      scales: {
+        x: { type: 'linear', min: minT, max: maxT,
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0, callback: v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+          grid: { display: false }, border: { display: false } },
+        y: { position: 'right',
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
+          grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
+          border: { display: false } }
+      }, animation: false
+    }
+  });
 }
 
 function rAddPosition(){
@@ -1353,6 +1373,32 @@ async function backfillChart() {
     if (rHistory.length > 400) rHistory.splice(0, rHistory.length - 400);
   }
 
+  // Overview (combined) backfill
+  const ovLastKnown = {};
+  [...stockSyms, ...rothSyms].forEach(sym => { ovLastKnown[sym] = prevClose[sym] ?? quotes[sym]?.pc ?? null; });
+  ovHistory.length = 0;
+  allTimes.forEach(t => {
+    let portGL = 0, rothGL = 0, hasAny = false;
+    stockSyms.forEach(sym => {
+      const pc = prevClose[sym] ?? quotes[sym]?.pc;
+      if (pc == null) return;
+      if (candleMap[sym]?.[t] != null) ovLastKnown[sym] = candleMap[sym][t];
+      if (ovLastKnown[sym] == null) return;
+      portGL += (ovLastKnown[sym] - pc) * portfolio[sym].shares;
+      hasAny = true;
+    });
+    rothSyms.forEach(sym => {
+      const pc = prevClose[sym] ?? quotes[sym]?.pc;
+      if (pc == null) return;
+      if (candleMap[sym]?.[t] != null) ovLastKnown[sym] = candleMap[sym][t];
+      if (ovLastKnown[sym] == null) return;
+      rothGL += (ovLastKnown[sym] - pc) * rPortfolio[sym].shares;
+      hasAny = true;
+    });
+    if (hasAny) ovHistory.push({ t: new Date(t), v: portGL + rothGL });
+  });
+  if (ovHistory.length > 400) ovHistory.splice(0, ovHistory.length - 400);
+
   console.log('backfillChart: done,', allTimes.length, 'points');
 }
 
@@ -1475,28 +1521,36 @@ function pushOvChartPoint() {
 function renderOvChart() {
   const wrap = document.getElementById('ov-chart-panel');
   if (!wrap) return;
+  const loading = document.getElementById('ov-chart-loading');
+  const canvasWrap = document.querySelector('#ov-chart-panel canvas')?.parentElement;
+
+  if (backfilling) {
+    wrap.style.display = '';
+    if (loading) loading.style.display = '';
+    if (canvasWrap) canvasWrap.style.display = 'none';
+    return;
+  }
+
   if (ovHistory.length < 2) { wrap.style.display = 'none'; return; }
+
   wrap.style.display = '';
+  if (loading) loading.style.display = 'none';
+  if (canvasWrap) canvasWrap.style.display = '';
+
   const vals = ovHistory.map(p => p.v);
-  const last = vals[vals.length - 1];
-  const isUp = last >= 0;
-  const color = isUp ? '#1a9470' : '#d94545';
-  const colorBg = isUp ? 'rgba(26,148,112,.07)' : 'rgba(217,69,69,.07)';
+  const last = vals[vals.length - 1], isUp = last >= 0;
+  const color = isUp ? '#1a9470' : '#d94545', colorBg = isUp ? 'rgba(26,148,112,.07)' : 'rgba(217,69,69,.07)';
   const valEl = document.getElementById('ov-chart-val');
-  valEl.textContent = fs$(last);
-  valEl.style.color = isUp ? 'var(--green-text)' : 'var(--red-text)';
-  const deltaEl = document.getElementById('ov-chart-delta');
-  const dayPct = document.getElementById('ov-day-pct')?.textContent || '';
+  valEl.textContent = fs$(last); valEl.style.color = isUp ? 'var(--green-text)' : 'var(--red-text)';
+  const deltaEl = document.getElementById('ov-chart-delta'), dayPct = document.getElementById('ov-day-pct')?.textContent || '';
   deltaEl.textContent = (dayPct && dayPct !== '—' ? dayPct + ' ' : '') + 'today';
   deltaEl.style.color = valEl.style.color;
   const fmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   document.getElementById('ov-chart-sub').textContent = `${fmt(ovHistory[0].t)} → ${fmt(ovHistory[ovHistory.length - 1].t)}`;
 
   const { dayEnd } = getDayWindow();
-  const firstT = ovHistory[0].t.getTime();
-  const lastT  = ovHistory[ovHistory.length - 1].t.getTime();
-  const minT = firstT;
-  const maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
+  const firstT = ovHistory[0].t.getTime(), lastT = ovHistory[ovHistory.length - 1].t.getTime();
+  const minT = firstT, maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
   const data = ovHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
 
   const ctx = document.getElementById('ov-chart').getContext('2d');
@@ -1516,22 +1570,14 @@ function renderOvChart() {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y) }, displayColors: false } },
       scales: {
-        x: {
-          type: 'linear',
-          min: minT, max: maxT,
-          ticks: {
-            color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0,
-            callback: v => { const d = new Date(v); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
-          },
-          grid: { display: false }, border: { display: false }
-        },
+        x: { type: 'linear', min: minT, max: maxT,
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0, callback: v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+          grid: { display: false }, border: { display: false } },
         y: { position: 'right',
-          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v); const s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
           grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
-          border: { display: false }
-        }
-      },
-      animation: false
+          border: { display: false } }
+      }, animation: false
     }
   });
 }
