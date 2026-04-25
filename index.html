@@ -566,6 +566,10 @@ footer a{color:var(--text2)}
             <span id="ov-port-day">—</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;color:var(--text3)">YTD</span>
+            <span id="ov-port-ytd">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:12px;color:var(--text3)">Positions</span>
             <span class="td-mono" style="font-size:13px" id="ov-port-count">—</span>
           </div>
@@ -595,6 +599,10 @@ footer a{color:var(--text2)}
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:12px;color:var(--text3)">Day Change</span>
             <span id="ov-roth-day">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;color:var(--text3)">YTD</span>
+            <span id="ov-roth-ytd">—</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:12px;color:var(--text3)">Positions</span>
@@ -947,7 +955,7 @@ function setSummary(val, cost, gl, glPct, dayGL, dayPct) {
 
 // ═══ OVERVIEW ═══
 function calcPortStats(port) {
-  let totalVal = 0, totalCost = 0, totalDayGL = 0, hasPrices = false, count = 0;
+  let totalVal = 0, totalCost = 0, totalDayGL = 0, totalYtdStart = 0, hasPrices = false, hasYtd = false, count = 0;
   Object.entries(port).forEach(([sym, pos]) => {
     if (sym === 'CASH') { totalVal += pos.shares; totalCost += pos.shares; return; }
     count++;
@@ -960,12 +968,17 @@ function calcPortStats(port) {
     if (mktVal != null) { totalVal += mktVal; hasPrices = true; }
     totalCost += cost;
     if (dayGL != null) totalDayGL += dayGL;
+    // YTD: sum up position values at start of year
+    const yc = ytdClose[sym];
+    if (yc && mktVal != null) { totalYtdStart += yc * pos.shares; hasYtd = true; }
   });
   const gl = hasPrices ? totalVal - totalCost : null;
   const glPct = (gl != null && totalCost > 0) ? (gl / totalCost) * 100 : null;
   const base = totalVal - totalDayGL;
   const dayPct = base > 0 ? (totalDayGL / base) * 100 : null;
-  return { totalVal, totalCost, gl, glPct, dayGL: hasPrices ? totalDayGL : null, dayPct, count };
+  const ytdGL = hasYtd ? totalVal - totalYtdStart : null;
+  const ytdPct = (ytdGL != null && totalYtdStart > 0) ? (ytdGL / totalYtdStart) * 100 : null;
+  return { totalVal, totalCost, gl, glPct, dayGL: hasPrices ? totalDayGL : null, dayPct, ytdGL, ytdPct, count };
 }
 
 function renderOverview() {
@@ -1006,6 +1019,8 @@ function renderOverview() {
     ret.innerHTML = stats.glPct != null ? `<span class="pill ${dir(stats.glPct)}">${arr(dir(stats.glPct))} ${fp(stats.glPct)}</span>` : '—';
     const dy = document.getElementById(prefix + '-day');
     dy.innerHTML = stats.dayGL != null ? `<span class="pill ${dir(stats.dayGL)}">${arr(dir(stats.dayGL))} ${fp(stats.dayPct)}</span>` : '—';
+    const ytdEl = document.getElementById(prefix + '-ytd');
+    if (ytdEl) ytdEl.innerHTML = stats.ytdPct != null ? `<span class="pill ${dir(stats.ytdPct)}">${arr(dir(stats.ytdPct))} ${fp(stats.ytdPct)}</span>` : '—';
     document.getElementById(prefix + '-count').textContent = stats.count + ' position' + (stats.count !== 1 ? 's' : '');
   };
   setCard('ov-port', p);
