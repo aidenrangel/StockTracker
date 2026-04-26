@@ -1231,7 +1231,8 @@ function rRenderChart() {
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: false } },
       scales: {
         x: { type: 'linear', min: minT, max: maxT,
-          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 8, maxRotation: 0, stepSize: 3600000, callback: v => { const d = new Date(v); if (d.getMinutes() !== 0) return null; const h = d.getHours() % 12 || 12; const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ' ' + ampm; } },
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxRotation: 0, callback: v => { const d = new Date(v); if (d.getMinutes() !== 0) return null; const h = d.getHours() % 12 || 12; const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ' ' + ampm; } },
+            afterBuildTicks: axis => { const ticks = []; let t = Math.ceil(axis.min / 3600000) * 3600000; while (t <= axis.max) { ticks.push({ value: t }); t += 3600000; } axis.ticks = ticks; },
           grid: { display: false }, border: { display: false } },
         y: { position: 'right',
           ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
@@ -1504,10 +1505,10 @@ function renderChart() {
           type: 'linear',
           min: minT, max: maxT,
           ticks: {
-            color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 8, maxRotation: 0,
-            stepSize: 3600000,
+            color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxRotation: 0,
             callback: v => { const d = new Date(v); if (d.getMinutes() !== 0) return null; const h = d.getHours() % 12 || 12; const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ' ' + ampm; }
           },
+          afterBuildTicks: axis => { const ticks = []; let t = Math.ceil(axis.min / 3600000) * 3600000; while (t <= axis.max) { ticks.push({ value: t }); t += 3600000; } axis.ticks = ticks; },
           grid: { display: false }, border: { display: false }
         },
         y: { position: 'right',
@@ -1589,7 +1590,8 @@ function renderOvChart() {
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: false } },
       scales: {
         x: { type: 'linear', min: minT, max: maxT,
-          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 8, maxRotation: 0, stepSize: 3600000, callback: v => { const d = new Date(v); if (d.getMinutes() !== 0) return null; const h = d.getHours() % 12 || 12; const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ' ' + ampm; } },
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxRotation: 0, callback: v => { const d = new Date(v); if (d.getMinutes() !== 0) return null; const h = d.getHours() % 12 || 12; const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ' ' + ampm; } },
+            afterBuildTicks: axis => { const ticks = []; let t = Math.ceil(axis.min / 3600000) * 3600000; while (t <= axis.max) { ticks.push({ value: t }); t += 3600000; } axis.ticks = ticks; },
           grid: { display: false }, border: { display: false } },
         y: { position: 'right',
           ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
