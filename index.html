@@ -366,6 +366,7 @@ footer a{color:var(--text2)}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn" onclick="exportCSV('portfolio')">⬇ Download CSV</button>
         <label class="btn" style="cursor:pointer;margin:0">⬆ Upload CSV<input type="file" accept=".csv" style="display:none" onchange="importCSV(event,'portfolio')" /></label>
+        <label class="btn" style="cursor:pointer;margin:0;background:rgba(99,179,237,0.1);border-color:rgba(99,179,237,0.4);color:rgba(99,179,237,1)">⬆ Robinhood History<input type="file" accept=".csv" style="display:none" onchange="importRobinhood(event,'portfolio')" /></label>
         <button class="btn danger" onclick="resetHoldings('portfolio')">✕ Reset All</button>
         <span style="font-size:11px;color:var(--text3)">Format: Symbol, Shares, Avg Cost</span>
       </div>
@@ -445,6 +446,7 @@ footer a{color:var(--text2)}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn" onclick="exportCSV('roth')">⬇ Download CSV</button>
         <label class="btn" style="cursor:pointer;margin:0">⬆ Upload CSV<input type="file" accept=".csv" style="display:none" onchange="importCSV(event,'roth')" /></label>
+        <label class="btn" style="cursor:pointer;margin:0;background:rgba(99,179,237,0.1);border-color:rgba(99,179,237,0.4);color:rgba(99,179,237,1)">⬆ Robinhood History<input type="file" accept=".csv" style="display:none" onchange="importRobinhood(event,'roth')" /></label>
         <button class="btn danger" onclick="resetHoldings('roth')">✕ Reset All</button>
         <span style="font-size:11px;color:var(--text3)">Format: Symbol, Shares, Avg Cost</span>
       </div>
@@ -1232,12 +1234,10 @@ function rRenderChart() {
   }, 0);
   const buildRothData = (history) => {
     const pts = history.map(p => ({ x: p.t.getTime(), y: p.v }));
-    if (rothLiveDayGL !== 0 && pts.length > 0) {
+    if (isExtendedHours() && rothLiveDayGL !== 0 && pts.length > 0) {
       const now = Date.now();
-      if (now > pts[pts.length-1].x) {
-        if (now - pts[pts.length-1].x > 60000) pts.push({ x: now, y: rothLiveDayGL });
-        else pts[pts.length-1] = { x: pts[pts.length-1].x, y: rothLiveDayGL };
-      } else { pts[pts.length-1] = { x: pts[pts.length-1].x, y: rothLiveDayGL }; }
+      if (now - pts[pts.length-1].x > 60000) pts.push({ x: now, y: rothLiveDayGL });
+      else pts[pts.length-1] = { x: pts[pts.length-1].x, y: rothLiveDayGL };
     }
     return pts;
   };
@@ -1616,12 +1616,10 @@ function renderChart() {
   }, 0);
   const buildData = (history) => {
     const pts = history.map(p => ({ x: p.t.getTime(), y: p.v }));
-    if (liveDayGL !== 0 && pts.length > 0) {
+    if (isExtendedHours() && liveDayGL !== 0 && pts.length > 0) {
       const now = Date.now();
-      if (now > pts[pts.length-1].x) {
-        if (now - pts[pts.length-1].x > 60000) pts.push({ x: now, y: liveDayGL });
-        else pts[pts.length-1] = { x: pts[pts.length-1].x, y: liveDayGL };
-      } else { pts[pts.length-1] = { x: pts[pts.length-1].x, y: liveDayGL }; }
+      if (now - pts[pts.length-1].x > 60000) pts.push({ x: now, y: liveDayGL });
+      else pts[pts.length-1] = { x: pts[pts.length-1].x, y: liveDayGL };
     }
     return pts;
   };
@@ -1730,12 +1728,10 @@ function renderOvChart() {
   }, 0);
   const buildOvData = (history) => {
     const pts = history.map(p => ({ x: p.t.getTime(), y: p.v }));
-    if (ovLiveDayGL !== 0 && pts.length > 0) {
+    if (isExtendedHours() && ovLiveDayGL !== 0 && pts.length > 0) {
       const now = Date.now();
-      if (now > pts[pts.length-1].x) {
-        if (now - pts[pts.length-1].x > 60000) pts.push({ x: now, y: ovLiveDayGL });
-        else pts[pts.length-1] = { x: pts[pts.length-1].x, y: ovLiveDayGL };
-      } else { pts[pts.length-1] = { x: pts[pts.length-1].x, y: ovLiveDayGL }; }
+      if (now - pts[pts.length-1].x > 60000) pts.push({ x: now, y: ovLiveDayGL });
+      else pts[pts.length-1] = { x: pts[pts.length-1].x, y: ovLiveDayGL };
     }
     return pts;
   };
@@ -2452,6 +2448,97 @@ function resetHoldings(account) {
     save(); renderPortfolio();
     setMsg(msgId, 'Portfolio holdings cleared.', 'ok');
   }
+}
+
+function importRobinhood(event, account) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const msgId = account === 'roth' ? 'r-csv-msg' : 'csv-msg';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const text = e.target.result;
+      // Parse CSV lines, handling multi-line description fields
+      const rows = [];
+      let current = [], inQuote = false, cell = '';
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '"') { inQuote = !inQuote; }
+        else if (ch === ',' && !inQuote) { current.push(cell.trim()); cell = ''; }
+        else if ((ch === '\n' || ch === '\r') && !inQuote) {
+          if (cell.trim() || current.length) { current.push(cell.trim()); rows.push(current); }
+          current = []; cell = '';
+        } else { cell += ch; }
+      }
+      if (current.length) rows.push(current);
+
+      // Find header row
+      const header = rows[0];
+      const col = name => header.findIndex(h => h.toLowerCase().includes(name.toLowerCase()));
+      const iDate = col('activity date'), iSym = col('instrument'), iCode = col('trans code');
+      const iQty = col('quantity'), iPrice = col('price');
+      if (iDate < 0 || iSym < 0 || iCode < 0) {
+        setMsg(msgId, 'Not a Robinhood CSV — missing expected columns.', 'err'); return;
+      }
+
+      // Replay all trades oldest-first to compute current shares + weighted avg cost
+      const positions = {}; // sym -> { shares, totalCost }
+      const dataRows = rows.slice(1).filter(r => r.length > iCode && r[iSym] && r[iCode]);
+      // Sort oldest first (dates are M/D/YYYY)
+      dataRows.sort((a, b) => new Date(a[iDate]) - new Date(b[iDate]));
+
+      for (const row of dataRows) {
+        const sym = row[iSym].trim().toUpperCase();
+        const code = row[iCode].trim().toUpperCase();
+        const qty = parseFloat(row[iQty]) || 0;
+        const price = parseFloat((row[iPrice] || '').replace(/[$,]/g, '')) || 0;
+        if (!sym || qty === 0) continue;
+
+        // Buy-like: Buy, OEXP (option expiry assignment), REC (free stock), CDIV reinvestment
+        if (['BUY'].includes(code) || (code === 'REC' && qty > 0)) {
+          if (!positions[sym]) positions[sym] = { shares: 0, totalCost: 0 };
+          positions[sym].totalCost += qty * price;
+          positions[sym].shares += qty;
+        }
+        // Sell: reduce shares, adjust cost basis proportionally
+        else if (code === 'SELL') {
+          if (!positions[sym]) continue;
+          const pos = positions[sym];
+          const avgCost = pos.shares > 0 ? pos.totalCost / pos.shares : 0;
+          pos.shares -= qty;
+          pos.totalCost -= qty * avgCost;
+          if (pos.shares <= 0.00001) { delete positions[sym]; }
+        }
+      }
+
+      // Write results into the portfolio
+      const port = account === 'roth' ? rPortfolio : portfolio;
+      Object.keys(port).forEach(k => delete port[k]); // clear existing
+      let count = 0;
+      for (const [sym, pos] of Object.entries(positions)) {
+        if (pos.shares > 0.00001) {
+          const avgCost = pos.totalCost / pos.shares;
+          port[sym] = { shares: +pos.shares.toFixed(6), avgCost: +avgCost.toFixed(4) };
+          count++;
+        }
+      }
+
+      save();
+      if (account === 'roth') renderRoth(); else renderPortfolio();
+      setMsg(msgId, `Imported ${count} positions from Robinhood history.`, 'ok');
+      if (apiKey || tiingoKey) {
+        Object.keys(port).filter(s => s !== 'CASH').forEach(sym => {
+          fetchQuote(sym); fetchPrevClose(sym); fetchYTD(sym); fetchSector(sym);
+          fetchEarnings(sym); fetchInsider(sym);
+        });
+      }
+    } catch(err) {
+      console.error('importRobinhood error', err);
+      setMsg(msgId, 'Error parsing file: ' + err.message, 'err');
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
 }
 
 // ═══ EARNINGS ═══
