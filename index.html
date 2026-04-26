@@ -1485,12 +1485,16 @@ function getDayWindow() {
 }
 
 // Build VOO overlay dataset scaled to match portfolio dollar P&L
-function makeVOODataset(startT) {
+function makeVOODataset(startT, endT) {
   if (!vooHistory.length) return null;
-  const data = vooHistory
+  let data = vooHistory
     .filter(p => p.t.getTime() >= startT)
-    .map(p => ({ x: p.t.getTime(), y: p.pct * 100 })); // pure % change
+    .map(p => ({ x: p.t.getTime(), y: p.pct * 100 }));
   if (!data.length) return null;
+  // Extend start: if VOO first point is after startT, prepend at startT with same value
+  if (data[0].x > startT) data.unshift({ x: startT, y: data[0].y });
+  // Extend end: if VOO last point is before endT, append at endT with same value
+  if (endT && data[data.length-1].x < endT) data.push({ x: endT, y: data[data.length-1].y });
   return {
     label: 'VOO',
     data,
@@ -1508,17 +1512,17 @@ function makeVOODataset(startT) {
 
 function vooDataset(history) {
   if (!vooHistory.length || !history.length) return null;
-  return makeVOODataset(history[0].t.getTime());
+  return makeVOODataset(history[0].t.getTime(), history[history.length-1].t.getTime());
 }
 
 function vooDatasetRoth() {
   if (!vooHistory.length || !rHistory.length) return null;
-  return makeVOODataset(rHistory[0].t.getTime());
+  return makeVOODataset(rHistory[0].t.getTime(), rHistory[rHistory.length-1].t.getTime());
 }
 
 function vooDatasetOv() {
   if (!vooHistory.length || !ovHistory.length) return null;
-  return makeVOODataset(ovHistory[0].t.getTime());
+  return makeVOODataset(ovHistory[0].t.getTime(), ovHistory[ovHistory.length-1].t.getTime());
 }
 
 function toggleVOO(which) {
