@@ -1467,11 +1467,11 @@ function getDayWindow() {
 }
 
 // Build VOO overlay dataset scaled to match portfolio dollar P&L
-function makeVOODataset(scale, startT) {
+function makeVOODataset(startT) {
   if (!vooHistory.length) return null;
   const data = vooHistory
     .filter(p => p.t.getTime() >= startT)
-    .map(p => ({ x: p.t.getTime(), y: p.pct * scale }));
+    .map(p => ({ x: p.t.getTime(), y: p.pct * 100 })); // pure % change
   if (!data.length) return null;
   return {
     label: 'VOO',
@@ -1490,25 +1490,17 @@ function makeVOODataset(scale, startT) {
 
 function vooDataset(history) {
   if (!vooHistory.length || !history.length) return null;
-  const totalCost = Object.entries(portfolio)
-    .filter(([s]) => s !== 'CASH')
-    .reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
-  return makeVOODataset(totalCost || 1, history[0].t.getTime());
+  return makeVOODataset(history[0].t.getTime());
 }
 
 function vooDatasetRoth() {
   if (!vooHistory.length || !rHistory.length) return null;
-  const totalCost = Object.entries(rPortfolio)
-    .filter(([s]) => s !== 'CASH')
-    .reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
-  return makeVOODataset(totalCost || 1, rHistory[0].t.getTime());
+  return makeVOODataset(rHistory[0].t.getTime());
 }
 
 function vooDatasetOv() {
   if (!vooHistory.length || !ovHistory.length) return null;
-  const portCost = Object.entries(portfolio).filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
-  const rothCost = Object.entries(rPortfolio).filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
-  return makeVOODataset((portCost + rothCost) || 1, ovHistory[0].t.getTime());
+  return makeVOODataset(ovHistory[0].t.getTime());
 }
 
 function toggleVOO(which) {
