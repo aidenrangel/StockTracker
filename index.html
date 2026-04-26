@@ -1226,9 +1226,22 @@ function rRenderChart() {
     return sum + pc * p.shares;
   }, 0);
   const rothDenominator = rothPrevCloseTotal || rothCost || 1;
+  const rothLiveDayGL = Object.entries(rPortfolio).filter(([s]) => s !== 'CASH').reduce((sum, [s, p]) => {
+    const q = quotes[s], pc = prevClose[s] ?? q?.pc; if (!q||!pc) return sum;
+    return sum + (q.c - pc) * p.shares;
+  }, 0);
+  const buildRothData = (history) => {
+    const pts = history.map(p => ({ x: p.t.getTime(), y: p.v }));
+    if (rothLiveDayGL !== 0 && pts.length > 0) {
+      const now = Date.now();
+      if (now - pts[pts.length-1].x > 60000) pts.push({ x: now, y: rothLiveDayGL });
+      else pts[pts.length-1] = { x: pts[pts.length-1].x, y: rothLiveDayGL };
+    }
+    return pts;
+  };
   const data = showVOO.roth && rothDenominator > 0
-    ? rHistory.map(p => ({ x: p.t.getTime(), y: (p.v / rothDenominator) * 100 }))
-    : rHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+    ? buildRothData(rHistory).map(p => ({ x: p.x, y: (p.y / rothDenominator) * 100 }))
+    : buildRothData(rHistory);
   const yFmtPctR = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
   const yFmtDlrR = v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; };
   const tooltipFmtR = showVOO.roth
@@ -1589,9 +1602,25 @@ function renderChart() {
     return sum + pc * p.shares;
   }, 0);
   const portDenominator = portPrevCloseTotal || totalCost || 1;
+  // Compute live dayGL from current quotes so last point always matches the Day Change card
+  const liveDayGL = Object.entries(portfolio).filter(([s]) => s !== 'CASH').reduce((sum, [s, p]) => {
+    const q = quotes[s], pc = prevClose[s] ?? q?.pc;
+    if (!q || !pc) return sum;
+    return sum + (q.c - pc) * p.shares;
+  }, 0);
+  const buildData = (history) => {
+    const pts = history.map(p => ({ x: p.t.getTime(), y: p.v }));
+    // Replace or append live point so chart tip matches card exactly
+    if (liveDayGL !== 0 && pts.length > 0) {
+      const now = Date.now();
+      if (now - pts[pts.length-1].x > 60000) pts.push({ x: now, y: liveDayGL });
+      else pts[pts.length-1] = { x: pts[pts.length-1].x, y: liveDayGL };
+    }
+    return pts;
+  };
   const data = showVOO.port && portDenominator > 0
-    ? portHistory.map(p => ({ x: p.t.getTime(), y: (p.v / portDenominator) * 100 }))
-    : portHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+    ? buildData(portHistory).map(p => ({ x: p.x, y: (p.y / portDenominator) * 100 }))
+    : buildData(portHistory);
   const yFmtPct = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
   const yFmtDlr = v => { const a = Math.abs(v); const s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; };
   const tooltipFmt = showVOO.port
@@ -1688,9 +1717,22 @@ function renderOvChart() {
     return sum + pc * p.shares;
   }, 0);
   const ovDenominator = ovPrevCloseTotal || ovCost || 1;
+  const ovLiveDayGL = [...Object.entries(portfolio), ...Object.entries(rPortfolio)].filter(([s]) => s !== 'CASH').reduce((sum, [s, p]) => {
+    const q = quotes[s], pc = prevClose[s] ?? q?.pc; if (!q||!pc) return sum;
+    return sum + (q.c - pc) * p.shares;
+  }, 0);
+  const buildOvData = (history) => {
+    const pts = history.map(p => ({ x: p.t.getTime(), y: p.v }));
+    if (ovLiveDayGL !== 0 && pts.length > 0) {
+      const now = Date.now();
+      if (now - pts[pts.length-1].x > 60000) pts.push({ x: now, y: ovLiveDayGL });
+      else pts[pts.length-1] = { x: pts[pts.length-1].x, y: ovLiveDayGL };
+    }
+    return pts;
+  };
   const data = showVOO.ov && ovDenominator > 0
-    ? ovHistory.map(p => ({ x: p.t.getTime(), y: (p.v / ovDenominator) * 100 }))
-    : ovHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+    ? buildOvData(ovHistory).map(p => ({ x: p.x, y: (p.y / ovDenominator) * 100 }))
+    : buildOvData(ovHistory);
   const yFmtPctO = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
   const yFmtDlrO = v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; };
   const tooltipFmtO = showVOO.ov
