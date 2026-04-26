@@ -688,6 +688,12 @@ footer a{color:var(--text2)}
     <!-- Meta row -->
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;font-size:11px;color:var(--text3)" id="co-meta"></div>
 
+    <!-- Trade History -->
+    <div id="co-trades-section" style="display:none;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Trade History</div>
+      <div id="co-trades" style="display:flex;flex-direction:column;gap:4px;max-height:180px;overflow-y:auto"></div>
+    </div>
+
     <div class="modal-btns">
       <button class="btn" onclick="document.getElementById('co-modal').classList.remove('open')">Close</button>
     </div>
@@ -762,6 +768,7 @@ let ws = null, refreshInterval = null, editingSym = null, activeMarketSym = null
 let portChart = null, donutChart = null, ovChart = null;
 let vooHistory = []; // VOO benchmark candle data {t, pct} — % change from prev close
 let showVOO = { port: false, roth: false, ov: false };
+let tradeHistory = JSON.parse(localStorage.getItem('trade_history') || '{}'); // sym -> [{date,code,qty,price}]
 let backfilling = false; // suppress chart renders until backfill is complete
 let sortCol = 'mktVal', sortDir = -1;
 
@@ -2358,6 +2365,29 @@ function showCompanyInfo(sym) {
 
   document.getElementById('co-modal').classList.add('open');
 
+  // Trade history
+  const tradesSection = document.getElementById('co-trades-section');
+  const tradesEl = document.getElementById('co-trades');
+  const trades = tradeHistory[sym];
+  if (trades && trades.length) {
+    tradesSection.style.display = '';
+    tradesEl.innerHTML = trades.map(t => {
+      const isBuy = t.code === 'Buy';
+      const color = isBuy ? 'var(--green-text)' : 'var(--red-text)';
+      const bg = isBuy ? 'var(--green-bg)' : 'var(--red-bg)';
+      const total = t.qty * t.price;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface2);border-radius:var(--r-sm);font-size:12px">
+        <span style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${bg};color:${color};flex-shrink:0">${t.code.toUpperCase()}</span>
+        <span style="color:var(--text3);flex-shrink:0">${t.date}</span>
+        <span style="font-family:'Space Mono',monospace;font-weight:700;flex:1">${t.qty.toFixed(4)} sh</span>
+        <span style="font-family:'Space Mono',monospace;color:var(--text2)">${f$(t.price)}</span>
+        <span style="font-family:'Space Mono',monospace;font-size:11px;color:${color};flex-shrink:0">${isBuy ? '-' : '+'}${f$(total)}</span>
+      </div>`;
+    }).join('');
+  } else {
+    tradesSection.style.display = 'none';
+  }
+
   // If profile not yet fetched, fetch it now
   if (!p && apiKey) {
     fetchSector(sym).then(() => {
@@ -2526,6 +2556,21 @@ function importRobinhood(event, account) {
           count++;
         }
       }
+
+      // Save full trade history for modal display (newest first per symbol)
+      const newTrades = {};
+      for (const row of dataRows) {
+        const sym = row[iSym].trim().toUpperCase();
+        const code = row[iCode].trim();
+        const qty = parseFloat(row[iQty]) || 0;
+        const price = parseFloat((row[iPrice] || '').replace(/[$,]/g, '')) || 0;
+        if (!sym || !['Buy','Sell'].includes(code) || qty === 0) continue;
+        if (!newTrades[sym]) newTrades[sym] = [];
+        newTrades[sym].push({ date: row[iDate], code, qty: +qty.toFixed(6), price: +price.toFixed(4) });
+      }
+      Object.keys(newTrades).forEach(sym => newTrades[sym].sort((a,b) => new Date(b.date) - new Date(a.date)));
+      tradeHistory = newTrades;
+      localStorage.setItem('trade_history', JSON.stringify(tradeHistory));
 
       save();
       if (account === 'roth') renderRoth(); else renderPortfolio();
