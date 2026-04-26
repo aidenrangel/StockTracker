@@ -2494,29 +2494,33 @@ function importRobinhood(event, account) {
         const price = parseFloat((row[iPrice] || '').replace(/[$,]/g, '')) || 0;
         if (!sym || qty === 0) continue;
 
-        // Buy-like: Buy, OEXP (option expiry assignment), REC (free stock), CDIV reinvestment
-        if (['BUY'].includes(code) || (code === 'REC' && qty > 0)) {
+        // Buy-like: Buy, REC (free stock)
+        if (code === 'Buy' || (code === 'REC' && qty > 0)) {
           if (!positions[sym]) positions[sym] = { shares: 0, totalCost: 0 };
           positions[sym].totalCost += qty * price;
           positions[sym].shares += qty;
         }
-        // Sell: reduce shares, adjust cost basis proportionally
-        else if (code === 'SELL') {
-          if (!positions[sym]) continue;
+        // Sell: reduce shares proportionally — never delete mid-loop (same-day wash trades go temporarily negative)
+        else if (code === 'Sell') {
+          if (!positions[sym]) positions[sym] = { shares: 0, totalCost: 0 };
           const pos = positions[sym];
-          const avgCost = pos.shares > 0 ? pos.totalCost / pos.shares : 0;
+          const avgCost = pos.shares > 0 ? pos.totalCost / pos.shares : price;
           pos.shares -= qty;
           pos.totalCost -= qty * avgCost;
-          if (pos.shares <= 0.00001) { delete positions[sym]; }
         }
       }
+
+      // Final cleanup: remove fully closed positions
+      Object.keys(positions).forEach(sym => {
+        if (positions[sym].shares <= 0.001) delete positions[sym];
+      });
 
       // Write results into the portfolio
       const port = account === 'roth' ? rPortfolio : portfolio;
       Object.keys(port).forEach(k => delete port[k]); // clear existing
       let count = 0;
       for (const [sym, pos] of Object.entries(positions)) {
-        if (pos.shares > 0.00001) {
+        if (pos.shares > 0.001) {
           const avgCost = pos.totalCost / pos.shares;
           port[sym] = { shares: +pos.shares.toFixed(6), avgCost: +avgCost.toFixed(4) };
           count++;
