@@ -1220,7 +1220,15 @@ function rRenderChart() {
   const { dayEnd } = getDayWindow();
   const firstT = rHistory[0].t.getTime(), lastT = rHistory[rHistory.length-1].t.getTime();
   const minT = firstT, maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
-  const data = rHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+  const rothCost = Object.entries(rPortfolio).filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
+  const data = showVOO.roth && rothCost > 0
+    ? rHistory.map(p => ({ x: p.t.getTime(), y: (p.v / rothCost) * 100 }))
+    : rHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+  const yFmtPctR = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+  const yFmtDlrR = v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; };
+  const tooltipFmtR = showVOO.roth
+    ? i => { const ds = i.dataset.label === 'VOO' ? ' VOO' : ' Roth IRA'; return ds + ': ' + (i.parsed.y >= 0 ? '+' : '') + i.parsed.y.toFixed(2) + '%'; }
+    : i => ' ' + fs$(i.parsed.y);
 
   const ctx = document.getElementById('r-chart').getContext('2d');
   if (rChart) {
@@ -1229,6 +1237,8 @@ function rRenderChart() {
     rChart.data.datasets[0].backgroundColor = colorBg;
     rChart.options.scales.x.min = minT;
     rChart.options.scales.x.max = maxT;
+    rChart.options.scales.y.ticks.callback = showVOO.roth ? yFmtPctR : yFmtDlrR;
+    rChart.options.plugins.tooltip.callbacks.label = tooltipFmtR;
     updateVOODataset(rChart, showVOO.roth ? vooDatasetRoth() : null);
     return;
   }
@@ -1237,14 +1247,14 @@ function rRenderChart() {
     data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: false } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: tooltipFmtR, title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: showVOO.roth } },
       scales: {
         x: { type: 'linear', min: minT, max: maxT,
           ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxRotation: 0, callback: v => { const d = new Date(v); if (d.getMinutes() !== 0) return null; const h = d.getHours() % 12 || 12; const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ' ' + ampm; } },
             afterBuildTicks: axis => { const ticks = []; let t = Math.ceil(axis.min / 3600000) * 3600000; while (t <= axis.max) { ticks.push({ value: t }); t += 3600000; } axis.ticks = ticks; },
           grid: { display: false }, border: { display: false } },
         y: { position: 'right',
-          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: showVOO.roth ? yFmtPctR : yFmtDlrR },
           grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
           border: { display: false } }
       }, animation: false
@@ -1574,7 +1584,16 @@ function renderChart() {
   // Only extend to 8 PM if we're currently in an active session (today is a trading day)
   const maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000; // +5 min buffer
 
-  const data = portHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+  // When VOO is on, show % change; otherwise show $ P&L
+  const totalCost = Object.entries(portfolio).filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
+  const data = showVOO.port && totalCost > 0
+    ? portHistory.map(p => ({ x: p.t.getTime(), y: (p.v / totalCost) * 100 }))
+    : portHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+  const yFmtPct = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+  const yFmtDlr = v => { const a = Math.abs(v); const s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; };
+  const tooltipFmt = showVOO.port
+    ? i => { const ds = i.dataset.label === 'VOO' ? ' VOO' : ' Portfolio'; return ds + ': ' + (i.parsed.y >= 0 ? '+' : '') + i.parsed.y.toFixed(2) + '%'; }
+    : i => ' ' + fs$(i.parsed.y);
 
   const ctx = document.getElementById('port-chart').getContext('2d');
   if (portChart) {
@@ -1583,6 +1602,8 @@ function renderChart() {
     portChart.data.datasets[0].backgroundColor = colorBg;
     portChart.options.scales.x.min = minT;
     portChart.options.scales.x.max = maxT;
+    portChart.options.scales.y.ticks.callback = showVOO.port ? yFmtPct : yFmtDlr;
+    portChart.options.plugins.tooltip.callbacks.label = tooltipFmt;
     updateVOODataset(portChart, showVOO.port ? vooDataset(portHistory) : null);
     return;
   }
@@ -1591,20 +1612,16 @@ function renderChart() {
     data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: false } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: tooltipFmt, title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: showVOO.port } },
       scales: {
         x: {
-          type: 'linear',
-          min: minT, max: maxT,
-          ticks: {
-            color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxRotation: 0,
-            callback: v => { const d = new Date(v); if (d.getMinutes() !== 0) return null; const h = d.getHours() % 12 || 12; const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ' ' + ampm; }
-          },
+          type: 'linear', min: minT, max: maxT,
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxRotation: 0, callback: v => { const d = new Date(v); if (d.getMinutes() !== 0) return null; const h = d.getHours() % 12 || 12; const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ' ' + ampm; } },
           afterBuildTicks: axis => { const ticks = []; let t = Math.ceil(axis.min / 3600000) * 3600000; while (t <= axis.max) { ticks.push({ value: t }); t += 3600000; } axis.ticks = ticks; },
           grid: { display: false }, border: { display: false }
         },
         y: { position: 'right',
-          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v); const s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: showVOO.port ? yFmtPct : yFmtDlr },
           grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
           border: { display: false }
         }
@@ -1662,7 +1679,15 @@ function renderOvChart() {
   const { dayEnd } = getDayWindow();
   const firstT = ovHistory[0].t.getTime(), lastT = ovHistory[ovHistory.length - 1].t.getTime();
   const minT = firstT, maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
-  const data = ovHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+  const ovCost = [...Object.entries(portfolio), ...Object.entries(rPortfolio)].filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
+  const data = showVOO.ov && ovCost > 0
+    ? ovHistory.map(p => ({ x: p.t.getTime(), y: (p.v / ovCost) * 100 }))
+    : ovHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
+  const yFmtPctO = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+  const yFmtDlrO = v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; };
+  const tooltipFmtO = showVOO.ov
+    ? i => { const ds = i.dataset.label === 'VOO' ? ' VOO' : ' Combined'; return ds + ': ' + (i.parsed.y >= 0 ? '+' : '') + i.parsed.y.toFixed(2) + '%'; }
+    : i => ' ' + fs$(i.parsed.y);
 
   const ctx = document.getElementById('ov-chart').getContext('2d');
   if (ovChart) {
@@ -1671,6 +1696,8 @@ function renderOvChart() {
     ovChart.data.datasets[0].backgroundColor = colorBg;
     ovChart.options.scales.x.min = minT;
     ovChart.options.scales.x.max = maxT;
+    ovChart.options.scales.y.ticks.callback = showVOO.ov ? yFmtPctO : yFmtDlrO;
+    ovChart.options.plugins.tooltip.callbacks.label = tooltipFmtO;
     updateVOODataset(ovChart, showVOO.ov ? vooDatasetOv() : null);
     return;
   }
@@ -1679,14 +1706,14 @@ function renderOvChart() {
     data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: false } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: tooltipFmtO, title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: showVOO.ov } },
       scales: {
         x: { type: 'linear', min: minT, max: maxT,
           ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxRotation: 0, callback: v => { const d = new Date(v); if (d.getMinutes() !== 0) return null; const h = d.getHours() % 12 || 12; const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ' ' + ampm; } },
             afterBuildTicks: axis => { const ticks = []; let t = Math.ceil(axis.min / 3600000) * 3600000; while (t <= axis.max) { ticks.push({ value: t }); t += 3600000; } axis.ticks = ticks; },
           grid: { display: false }, border: { display: false } },
         y: { position: 'right',
-          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; } },
+          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: showVOO.ov ? yFmtPctO : yFmtDlrO },
           grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
           border: { display: false } }
       }, animation: false
