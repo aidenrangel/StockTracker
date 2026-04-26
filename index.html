@@ -2489,7 +2489,7 @@ function importRobinhood(event, account) {
 
       for (const row of dataRows) {
         const sym = row[iSym].trim().toUpperCase();
-        const code = row[iCode].trim().toUpperCase();
+        const code = row[iCode].trim();
         const qty = parseFloat(row[iQty]) || 0;
         const price = parseFloat((row[iPrice] || '').replace(/[$,]/g, '')) || 0;
         if (!sym || qty === 0) continue;
