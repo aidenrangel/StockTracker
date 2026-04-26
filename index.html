@@ -1228,7 +1228,7 @@ function rRenderChart() {
     data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => new Date(items[0].parsed.x).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, displayColors: false } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: false } },
       scales: {
         x: { type: 'linear', min: minT, max: maxT,
           ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0, callback: v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
@@ -1498,7 +1498,7 @@ function renderChart() {
     data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => new Date(items[0].parsed.x).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, displayColors: false } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: false } },
       scales: {
         x: {
           type: 'linear',
@@ -1585,7 +1585,7 @@ function renderOvChart() {
     data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => new Date(items[0].parsed.x).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, displayColors: false } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => ' ' + fs$(i.parsed.y), title: items => { const d = new Date(items[0].parsed.x); const h = d.getHours() % 12 || 12; const m = String(d.getMinutes()).padStart(2,'0'); const ampm = d.getHours() < 12 ? 'AM' : 'PM'; return h + ':' + m + ' ' + ampm; } }, displayColors: false } },
       scales: {
         x: { type: 'linear', min: minT, max: maxT,
           ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0, callback: v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
