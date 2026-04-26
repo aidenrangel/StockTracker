@@ -311,10 +311,11 @@ footer a{color:var(--text2)}
           <div class="chart-title">Today's P&amp;L</div>
           <div class="chart-sub" id="chart-sub">Live session</div>
         </div>
-        <div>
+      <div style="display:flex;align-items:center;gap:10px">
+          <button id="voo-toggle-port" onclick="toggleVOO('port')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">VOO</button>
           <div class="chart-val" id="chart-val">—</div>
           <div class="chart-delta" id="chart-delta"></div>
-        </div>
+      </div>
       </div>
       <div id="chart-loading" style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px;letter-spacing:.5px">Loading chart…</div>
       <div style="height:180px;position:relative;display:none"><canvas id="port-chart"></canvas></div>
@@ -388,8 +389,11 @@ footer a{color:var(--text2)}
           <div class="chart-sub" id="r-chart-sub">Live session</div>
         </div>
         <div>
-          <div class="chart-val" id="r-chart-val">—</div>
-          <div class="chart-delta" id="r-chart-delta"></div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button id="voo-toggle-roth" onclick="toggleVOO('roth')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">VOO</button>
+            <div class="chart-val" id="r-chart-val">—</div>
+            <div class="chart-delta" id="r-chart-delta"></div>
+          </div>
         </div>
       </div>
       <div id="r-chart-loading" style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px;letter-spacing:.5px">Loading chart…</div>
@@ -533,8 +537,11 @@ footer a{color:var(--text2)}
           <div class="chart-sub" id="ov-chart-sub">Portfolio + Roth IRA</div>
         </div>
         <div>
-          <div class="chart-val" id="ov-chart-val">—</div>
-          <div class="chart-delta" id="ov-chart-delta"></div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button id="voo-toggle-ov" onclick="toggleVOO('ov')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">VOO</button>
+            <div class="chart-val" id="ov-chart-val">—</div>
+            <div class="chart-delta" id="ov-chart-delta"></div>
+          </div>
         </div>
       </div>
       <div id="ov-chart-loading" style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px;letter-spacing:.5px">Loading chart…</div>
@@ -751,6 +758,8 @@ let tiingoKey = localStorage.getItem('tiingo_key') || '';
 let tiingoWs = null;
 let ws = null, refreshInterval = null, editingSym = null, activeMarketSym = null;
 let portChart = null, donutChart = null, ovChart = null;
+let vooHistory = []; // VOO benchmark candle data {t, pct} — % change from prev close
+let showVOO = { port: false, roth: false, ov: false };
 let backfilling = false; // suppress chart renders until backfill is complete
 let sortCol = 'mktVal', sortDir = -1;
 
@@ -1220,7 +1229,7 @@ function rRenderChart() {
     rChart.data.datasets[0].backgroundColor = colorBg;
     rChart.options.scales.x.min = minT;
     rChart.options.scales.x.max = maxT;
-    rChart.update('none');
+    updateVOODataset(rChart, showVOO.roth ? vooDatasetRoth() : null);
     return;
   }
   rChart = new Chart(ctx, {
@@ -1322,8 +1331,8 @@ async function backfillChart() {
 
   const rothSyms = Object.keys(rPortfolio).filter(s => s !== 'CASH');
 
-  // Fetch all symbols needed (union of portfolio + roth, deduplicated)
-  const allSymsToFetch = [...new Set([...stockSyms, ...rothSyms])];
+  // Fetch all symbols needed (union of portfolio + roth + VOO for benchmark, deduplicated)
+  const allSymsToFetch = [...new Set([...stockSyms, ...rothSyms, 'VOO'])];
   const candleMap = {};
   await Promise.all(allSymsToFetch.map(async sym => {
     try {
@@ -1417,6 +1426,19 @@ async function backfillChart() {
   });
   if (ovHistory.length > 400) ovHistory.splice(0, ovHistory.length - 400);
 
+  // VOO benchmark history — store as % change from prev close
+  if (candleMap['VOO']) {
+    const vooPc = prevClose['VOO'] ?? quotes['VOO']?.pc;
+    vooHistory.length = 0;
+    if (vooPc) {
+      allTimes.forEach(t => {
+        if (candleMap['VOO']?.[t] != null) {
+          vooHistory.push({ t: new Date(t), pct: (candleMap['VOO'][t] - vooPc) / vooPc });
+        }
+      });
+    }
+  }
+
   console.log('backfillChart: done,', allTimes.length, 'points');
 }
 
@@ -1432,6 +1454,97 @@ function getDayWindow() {
     dayStart: etMidnight + 4  * 3600000 + offsetMs, // 4 AM ET
     dayEnd:   etMidnight + 20 * 3600000 + offsetMs  // 8 PM ET
   };
+}
+
+// Build VOO overlay dataset scaled to match portfolio dollar P&L
+function vooDataset(history) {
+  if (!vooHistory.length || !history.length) return null;
+  // Scale VOO % change by the portfolio's start-of-day value
+  const portStartVal = history[0] ? history[0].v : 0;
+  // Use total cost as a proxy for invested capital to scale VOO
+  const totalCost = Object.entries(portfolio)
+    .filter(([s]) => s !== 'CASH')
+    .reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
+  const scale = totalCost || 1;
+  return {
+    label: 'VOO',
+    data: vooHistory.map(p => ({ x: p.t.getTime(), y: p.pct * scale })),
+    borderColor: 'rgba(99,179,237,0.8)',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderDash: [4, 3],
+    pointRadius: 0,
+    pointHoverRadius: 3,
+    fill: false,
+    tension: 0.3,
+    order: 1
+  };
+}
+
+function vooDatasetRoth() {
+  if (!vooHistory.length) return null;
+  const totalCost = Object.entries(rPortfolio)
+    .filter(([s]) => s !== 'CASH')
+    .reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
+  const scale = totalCost || 1;
+  return {
+    label: 'VOO',
+    data: vooHistory.map(p => ({ x: p.t.getTime(), y: p.pct * scale })),
+    borderColor: 'rgba(99,179,237,0.8)',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderDash: [4, 3],
+    pointRadius: 0,
+    pointHoverRadius: 3,
+    fill: false,
+    tension: 0.3,
+    order: 1
+  };
+}
+
+function vooDatasetOv() {
+  if (!vooHistory.length) return null;
+  const portCost = Object.entries(portfolio).filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
+  const rothCost = Object.entries(rPortfolio).filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
+  const scale = (portCost + rothCost) || 1;
+  return {
+    label: 'VOO',
+    data: vooHistory.map(p => ({ x: p.t.getTime(), y: p.pct * scale })),
+    borderColor: 'rgba(99,179,237,0.8)',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderDash: [4, 3],
+    pointRadius: 0,
+    pointHoverRadius: 3,
+    fill: false,
+    tension: 0.3,
+    order: 1
+  };
+}
+
+function toggleVOO(which) {
+  showVOO[which] = !showVOO[which];
+  const btn = document.getElementById('voo-toggle-' + which);
+  if (btn) {
+    btn.style.background = showVOO[which] ? 'rgba(99,179,237,0.2)' : 'transparent';
+    btn.style.color = showVOO[which] ? 'rgba(99,179,237,1)' : 'var(--text3)';
+    btn.style.borderColor = showVOO[which] ? 'rgba(99,179,237,0.6)' : 'var(--border)';
+  }
+  if (which === 'port') renderChart();
+  else if (which === 'roth') rRenderChart();
+  else renderOvChart();
+}
+
+function updateVOODataset(chart, ds) {
+  if (!chart) return;
+  const existing = chart.data.datasets.findIndex(d => d.label === 'VOO');
+  if (ds) {
+    if (existing >= 0) chart.data.datasets[existing] = ds;
+    else chart.data.datasets.push(ds);
+  } else {
+    if (existing >= 0) chart.data.datasets.splice(existing, 1);
+  }
+  chart.update('none');
 }
 
 function renderChart() {
@@ -1491,7 +1604,7 @@ function renderChart() {
     portChart.data.datasets[0].backgroundColor = colorBg;
     portChart.options.scales.x.min = minT;
     portChart.options.scales.x.max = maxT;
-    portChart.update('none');
+    updateVOODataset(portChart, showVOO.port ? vooDataset(portHistory) : null);
     return;
   }
   portChart = new Chart(ctx, {
@@ -1579,7 +1692,7 @@ function renderOvChart() {
     ovChart.data.datasets[0].backgroundColor = colorBg;
     ovChart.options.scales.x.min = minT;
     ovChart.options.scales.x.max = maxT;
-    ovChart.update('none');
+    updateVOODataset(ovChart, showVOO.ov ? vooDatasetOv() : null);
     return;
   }
   ovChart = new Chart(ctx, {
