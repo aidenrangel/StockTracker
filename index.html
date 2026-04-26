@@ -1221,8 +1221,13 @@ function rRenderChart() {
   const firstT = rHistory[0].t.getTime(), lastT = rHistory[rHistory.length-1].t.getTime();
   const minT = firstT, maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
   const rothCost = Object.entries(rPortfolio).filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
-  const data = showVOO.roth && rothCost > 0
-    ? rHistory.map(p => ({ x: p.t.getTime(), y: (p.v / rothCost) * 100 }))
+  const rothPrevCloseTotal = Object.entries(rPortfolio).filter(([s]) => s !== 'CASH').reduce((sum, [s, p]) => {
+    const pc = prevClose[s] ?? quotes[s]?.pc ?? p.avgCost;
+    return sum + pc * p.shares;
+  }, 0);
+  const rothDenominator = rothPrevCloseTotal || rothCost || 1;
+  const data = showVOO.roth && rothDenominator > 0
+    ? rHistory.map(p => ({ x: p.t.getTime(), y: (p.v / rothDenominator) * 100 }))
     : rHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
   const yFmtPctR = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
   const yFmtDlrR = v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; };
@@ -1578,8 +1583,14 @@ function renderChart() {
 
   // When VOO is on, show % change; otherwise show $ P&L
   const totalCost = Object.entries(portfolio).filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
-  const data = showVOO.port && totalCost > 0
-    ? portHistory.map(p => ({ x: p.t.getTime(), y: (p.v / totalCost) * 100 }))
+  // Use prev close total as denominator to match the Day Change % card
+  const portPrevCloseTotal = Object.entries(portfolio).filter(([s]) => s !== 'CASH').reduce((sum, [s, p]) => {
+    const pc = prevClose[s] ?? quotes[s]?.pc ?? p.avgCost;
+    return sum + pc * p.shares;
+  }, 0);
+  const portDenominator = portPrevCloseTotal || totalCost || 1;
+  const data = showVOO.port && portDenominator > 0
+    ? portHistory.map(p => ({ x: p.t.getTime(), y: (p.v / portDenominator) * 100 }))
     : portHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
   const yFmtPct = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
   const yFmtDlr = v => { const a = Math.abs(v); const s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; };
@@ -1672,8 +1683,13 @@ function renderOvChart() {
   const firstT = ovHistory[0].t.getTime(), lastT = ovHistory[ovHistory.length - 1].t.getTime();
   const minT = firstT, maxT = isExtendedHours() ? Math.max(dayEnd, lastT) : lastT + 5 * 60000;
   const ovCost = [...Object.entries(portfolio), ...Object.entries(rPortfolio)].filter(([s]) => s !== 'CASH').reduce((sum, [, p]) => sum + p.avgCost * p.shares, 0);
-  const data = showVOO.ov && ovCost > 0
-    ? ovHistory.map(p => ({ x: p.t.getTime(), y: (p.v / ovCost) * 100 }))
+  const ovPrevCloseTotal = [...Object.entries(portfolio), ...Object.entries(rPortfolio)].filter(([s]) => s !== 'CASH').reduce((sum, [s, p]) => {
+    const pc = prevClose[s] ?? quotes[s]?.pc ?? p.avgCost;
+    return sum + pc * p.shares;
+  }, 0);
+  const ovDenominator = ovPrevCloseTotal || ovCost || 1;
+  const data = showVOO.ov && ovDenominator > 0
+    ? ovHistory.map(p => ({ x: p.t.getTime(), y: (p.v / ovDenominator) * 100 }))
     : ovHistory.map(p => ({ x: p.t.getTime(), y: p.v }));
   const yFmtPctO = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
   const yFmtDlrO = v => { const a = Math.abs(v), s = a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0); return (v >= 0 ? '+$' : '-$') + s; };
