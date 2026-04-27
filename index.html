@@ -908,6 +908,7 @@ function renderPortfolio() {
       case 'avgCost': return r.pos.avgCost;
       case 'mktVal': return r.mktVal ?? -Infinity;
       case 'gl': return r.gl ?? -Infinity;
+      case 'glPct': return r.glPct ?? -Infinity;
       case 'ytd':    return ytdClose[r.sym] && r.price != null ? ((r.price - ytdClose[r.sym]) / ytdClose[r.sym]) * 100 : -Infinity;
       default: return 0;
     }
