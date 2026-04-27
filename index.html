@@ -994,7 +994,7 @@ function calcPortStats(port) {
     const q = quotes[sym];
     const price = q ? q.c : null;
     const mktVal = price != null ? price * pos.shares : null;
-    const cost = pos.avgCost * pos.shares;
+    const cost = pos.netCost != null ? pos.netCost : pos.avgCost * pos.shares;
     const pc = prevClose[sym] ?? q?.pc ?? null;
     const dayGL = (q && pc != null) ? (q.c - pc) * pos.shares : null;
     if (mktVal != null) { totalVal += mktVal; hasPrices = true; }
