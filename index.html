@@ -987,8 +987,11 @@ function calcPortStats(port) {
     const price = q ? q.c : null;
     const mktVal = price != null ? price * pos.shares : null;
     const cost = pos.netCost != null ? pos.netCost : pos.avgCost * pos.shares;
+    const pc = prevClose[sym] ?? q?.pc ?? null;
+    const dayGL = (q && pc != null) ? (q.c - pc) * pos.shares : null;
+    if (mktVal != null) { totalVal += mktVal; hasPrices = true; }
+    totalCost += cost;
     if (dayGL != null) totalDayGL += dayGL;
-    // YTD: sum up position values at start of year
     const yc = ytdClose[sym];
     if (yc && mktVal != null) { totalYtdStart += yc * pos.shares; hasYtd = true; }
   });
