@@ -2533,7 +2533,12 @@ function importRobinhood(event, account) {
           positions[sym].shares += qty;
           if (code === 'Buy') { if (!cashIn[sym]) cashIn[sym] = 0; cashIn[sym] += qty * price; }
         }
-        // Sell: reduce shares proportionally — never delete mid-loop (same-day wash trades go temporarily negative)
+        // Stock split: adds shares but does NOT change total cost basis
+        else if (code === 'SPL' && qty > 0) {
+          if (!positions[sym]) positions[sym] = { shares: 0, totalCost: 0 };
+          positions[sym].shares += qty;
+        }
+        // Sell: reduce shares proportionally
         else if (code === 'Sell') {
           if (!positions[sym]) positions[sym] = { shares: 0, totalCost: 0 };
           const pos = positions[sym];
