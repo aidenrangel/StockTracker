@@ -987,29 +987,32 @@ function setSummary(val, cost, gl, glPct, dayGL, dayPct) {
 
 // ═══ OVERVIEW ═══
 function calcPortStats(port) {
-  let totalVal = 0, totalCost = 0, totalDayGL = 0, totalYtdStart = 0, hasPrices = false, hasYtd = false, count = 0;
+  let totalVal = 0, totalCost = 0, totalNetCost = 0, totalDayGL = 0, totalYtdStart = 0, hasPrices = false, hasYtd = false, count = 0;
   Object.entries(port).forEach(([sym, pos]) => {
-    if (sym === 'CASH') { totalVal += pos.shares; totalCost += pos.shares; return; }
+    if (sym === 'CASH') { totalVal += pos.shares; totalCost += pos.shares; totalNetCost += pos.shares; return; }
     count++;
     const q = quotes[sym];
     const price = q ? q.c : null;
     const mktVal = price != null ? price * pos.shares : null;
     const cost = pos.avgCost * pos.shares;
+    const netCost = pos.netCost != null ? pos.netCost : cost;
     const pc = prevClose[sym] ?? q?.pc ?? null;
     const dayGL = (q && pc != null) ? (q.c - pc) * pos.shares : null;
     if (mktVal != null) { totalVal += mktVal; hasPrices = true; }
     totalCost += cost;
+    totalNetCost += netCost;
     if (dayGL != null) totalDayGL += dayGL;
     const yc = ytdClose[sym];
     if (yc && mktVal != null) { totalYtdStart += yc * pos.shares; hasYtd = true; }
   });
-  const gl = hasPrices ? totalVal - totalCost : null;
-  const glPct = (gl != null && totalCost > 0) ? (gl / totalCost) * 100 : null;
+  const displayCost = totalNetCost;
+  const gl = hasPrices ? totalVal - displayCost : null;
+  const glPct = (gl != null && displayCost > 0) ? (gl / displayCost) * 100 : null;
   const base = totalVal - totalDayGL;
   const dayPct = base > 0 ? (totalDayGL / base) * 100 : null;
   const ytdGL = hasYtd ? totalVal - totalYtdStart : null;
   const ytdPct = (ytdGL != null && totalYtdStart > 0) ? (ytdGL / totalYtdStart) * 100 : null;
-  return { totalVal, totalCost, gl, glPct, dayGL: hasPrices ? totalDayGL : null, dayPct, ytdGL, ytdPct, count };
+  return { totalVal, totalCost: displayCost, gl, glPct, dayGL: hasPrices ? totalDayGL : null, dayPct, ytdGL, ytdPct, count };
 }
 
 function renderOverview() {
