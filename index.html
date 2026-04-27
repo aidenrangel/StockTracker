@@ -1559,7 +1559,7 @@ async function fetchYTDDaily(syms) {
   await Promise.all(syms.map(async sym => {
     if (ytdDailyCache[sym]) return;
     try {
-      const r = await fetch(`${TIINGO_PROXY}/daily/${sym}/prices?startDate=${year}-01-01&token=${tiingoKey}`, { headers: { 'Authorization': `Token ${tiingoKey}` } });
+      const r = await fetch(`${TIINGO_PROXY}/tiingo/daily/${sym}/prices?startDate=${year}-01-01&token=${tiingoKey}`, { headers: { 'Authorization': `Token ${tiingoKey}` } });
       const d = await r.json();
       if (Array.isArray(d) && d.length) ytdDailyCache[sym] = d.map(b => ({ date: b.date.slice(0,10), close: b.adjClose ?? b.close }));
     } catch(e) { console.error('fetchYTDDaily', sym, e); }
