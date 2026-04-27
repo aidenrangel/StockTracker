@@ -1570,20 +1570,45 @@ function buildYTDSeries(port) {
   const syms = Object.keys(port).filter(s => s !== 'CASH');
   const allDates = [...new Set(syms.flatMap(s => (ytdDailyCache[s] || []).map(b => b.date)))].sort();
   if (!allDates.length) return null;
-  const lastKnown = {};
-  const pts = [];
+
+  // Build running share count per symbol per date using trade history
+  const sharesAt = {};
+  syms.forEach(sym => {
+    const trades = (tradeHistory[sym] || []).slice().sort((a,b) => new Date(a.date) - new Date(b.date));
+    let running = 0, tradeIdx = 0;
+    sharesAt[sym] = {};
+    for (const date of allDates) {
+      while (tradeIdx < trades.length && trades[tradeIdx].date <= date) {
+        const t = trades[tradeIdx++];
+        if (t.code === 'Buy') running += t.qty;
+        else if (t.code === 'Sell') running -= t.qty;
+      }
+      sharesAt[sym][date] = Math.max(0, running);
+    }
+    // No trade history — use current shares for all dates
+    if (!trades.length) allDates.forEach(d => { sharesAt[sym][d] = port[sym].shares; });
+  });
+
+  // Compute portfolio value each day
+  const lastClose = {};
+  const dailyVals = [];
   for (const date of allDates) {
     let val = 0, hasAny = false;
     for (const sym of syms) {
       const bar = (ytdDailyCache[sym] || []).find(b => b.date === date);
-      if (bar) lastKnown[sym] = bar.close;
-      if (lastKnown[sym] != null && port[sym]) { val += lastKnown[sym] * port[sym].shares; hasAny = true; }
+      if (bar) lastClose[sym] = bar.close;
+      const shares = sharesAt[sym][date] ?? 0;
+      if (lastClose[sym] != null && shares >= 0) { val += lastClose[sym] * shares; hasAny = true; }
     }
-    if (hasAny) pts.push({ x: new Date(date + 'T12:00:00').getTime(), y: val });
+    if (hasAny) dailyVals.push({ date, x: new Date(date + 'T12:00:00').getTime(), val });
   }
-  if (pts.length < 2) return null;
-  const base = pts[0].y;
-  return pts.map(p => ({ x: p.x, y: ((p.y - base) / base) * 100 }));
+  if (dailyVals.length < 2) return null;
+
+  // Compute cumulative dollar P&L day by day, normalize to % from start
+  const startVal = dailyVals[0].val;
+  if (startVal === 0) return null;
+  const pts = dailyVals.map(d => ({ x: d.x, y: ((d.val - startVal) / startVal) * 100 }));
+  return pts;
 }
 
 function makeYTDChart(canvasId, setChartRef, data) {
