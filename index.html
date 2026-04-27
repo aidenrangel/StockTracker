@@ -1570,29 +1570,6 @@ function buildYTDSeries(port) {
   const syms = Object.keys(port).filter(s => s !== 'CASH');
   const allDates = [...new Set(syms.flatMap(s => (ytdDailyCache[s] || []).map(b => b.date)))].sort();
   if (!allDates.length) return null;
-
-  // Build share count at each date by replaying trade history
-  // sharesAt[sym][date] = shares owned after close of that date
-  const sharesAt = {};
-  syms.forEach(sym => {
-    const trades = (tradeHistory[sym] || []).slice().sort((a,b) => new Date(a.date) - new Date(b.date));
-    sharesAt[sym] = {};
-    let running = 0;
-    let tradeIdx = 0;
-    for (const date of allDates) {
-      // Apply all trades on or before this date
-      while (tradeIdx < trades.length && trades[tradeIdx].date <= date) {
-        const t = trades[tradeIdx];
-        if (t.code === 'Buy') running += t.qty;
-        else if (t.code === 'Sell') running -= t.qty;
-        tradeIdx++;
-      }
-      sharesAt[sym][date] = Math.max(0, running);
-    }
-    // If no trade history for this sym, use current shares for all dates
-    if (!trades.length) allDates.forEach(d => { sharesAt[sym][d] = port[sym].shares; });
-  });
-
   const lastKnown = {};
   const pts = [];
   for (const date of allDates) {
@@ -1600,14 +1577,11 @@ function buildYTDSeries(port) {
     for (const sym of syms) {
       const bar = (ytdDailyCache[sym] || []).find(b => b.date === date);
       if (bar) lastKnown[sym] = bar.close;
-      const shares = sharesAt[sym]?.[date] ?? 0;
-      if (lastKnown[sym] != null && shares > 0) { val += lastKnown[sym] * shares; hasAny = true; }
+      if (lastKnown[sym] != null && port[sym]) { val += lastKnown[sym] * port[sym].shares; hasAny = true; }
     }
     if (hasAny) pts.push({ x: new Date(date + 'T12:00:00').getTime(), y: val });
   }
   if (pts.length < 2) return null;
-
-  // Normalize to % change from first point
   const base = pts[0].y;
   return pts.map(p => ({ x: p.x, y: ((p.y - base) / base) * 100 }));
 }
