@@ -769,6 +769,8 @@ let portChart = null, donutChart = null, ovChart = null;
 let vooHistory = []; // VOO benchmark candle data {t, pct} — % change from prev close
 let showVOO = { port: false, roth: false, ov: false };
 let tradeHistory = JSON.parse(localStorage.getItem('trade_history') || '{}'); // sym -> [{date,code,qty,price}]
+let customCostBasis = { port: null, roth: null }; // optional manual override stored in localStorage
+try { const c = JSON.parse(localStorage.getItem('custom_cost_basis') || 'null'); if (c) customCostBasis = c; } catch(e) {}
 let backfilling = false; // suppress chart renders until backfill is complete
 let sortCol = 'mktVal', sortDir = -1;
 
@@ -882,7 +884,7 @@ function renderPortfolio() {
     const q = isCash ? null : quotes[sym];
     const price = isCash ? 1 : (q ? q.c : null);
     const mktVal = isCash ? pos.shares : (price != null ? price * pos.shares : null);
-    const cost = isCash ? pos.shares : pos.avgCost * pos.shares;
+    const cost = isCash ? pos.shares : (pos.netCost != null ? pos.netCost : pos.avgCost * pos.shares);
     const gl = isCash ? 0 : (mktVal != null ? mktVal - cost : null);
     const glPct = isCash ? 0 : (gl != null && cost > 0 ? (gl / cost) * 100 : null);
     const pc = prevClose[sym] ?? q?.pc ?? null;
@@ -953,11 +955,12 @@ function renderPortfolio() {
     tbody.appendChild(tr);
   });
 
-  const totalGL = hasPrices ? totalVal - totalCost : null;
-  const totalGLPct = (totalGL != null && totalCost > 0) ? (totalGL / totalCost) * 100 : null;
+  const displayCost = totalCost;
+  const totalGL = hasPrices ? totalVal - displayCost : null;
+  const totalGLPct = (totalGL != null && displayCost > 0) ? (totalGL / displayCost) * 100 : null;
   const baseline = totalVal - totalDayGL;
   const totalDayPct = baseline > 0 ? (totalDayGL / baseline) * 100 : null;
-  setSummary(totalVal > 0 ? totalVal : null, totalCost, totalGL, totalGLPct, hasPrices ? totalDayGL : null, hasPrices ? totalDayPct : null);
+  setSummary(totalVal > 0 ? totalVal : null, displayCost, totalGL, totalGLPct, hasPrices ? totalDayGL : null, hasPrices ? totalDayPct : null);
   updateSortHeaders();
 }
 
@@ -982,11 +985,7 @@ function calcPortStats(port) {
     const q = quotes[sym];
     const price = q ? q.c : null;
     const mktVal = price != null ? price * pos.shares : null;
-    const cost = pos.avgCost * pos.shares;
-    const pc = prevClose[sym] ?? q?.pc ?? null;
-    const dayGL = (q && pc != null) ? (q.c - pc) * pos.shares : null;
-    if (mktVal != null) { totalVal += mktVal; hasPrices = true; }
-    totalCost += cost;
+    const cost = pos.netCost != null ? pos.netCost : pos.avgCost * pos.shares;
     if (dayGL != null) totalDayGL += dayGL;
     // YTD: sum up position values at start of year
     const yc = ytdClose[sym];
@@ -1173,10 +1172,11 @@ function renderRoth() {
     }
     tbody.appendChild(tr);
   });
-  const totalGL=hasPrices?totalVal-totalCost:null;
-  const totalGLPct=(totalGL!=null&&totalCost>0)?(totalGL/totalCost)*100:null;
+  const rDisplayCost = totalCost;
+  const totalGL=hasPrices?totalVal-rDisplayCost:null;
+  const totalGLPct=(totalGL!=null&&rDisplayCost>0)?(totalGL/rDisplayCost)*100:null;
   const base=totalVal-totalDayGL, totalDayPct=base>0?(totalDayGL/base)*100:null;
-  rSetSummary(totalVal>0?totalVal:null,totalCost,totalGL,totalGLPct,hasPrices?totalDayGL:null,hasPrices?totalDayPct:null);
+  rSetSummary(totalVal>0?totalVal:null,rDisplayCost,totalGL,totalGLPct,hasPrices?totalDayGL:null,hasPrices?totalDayPct:null);
   rUpdateHeaders();
 }
 
@@ -2512,7 +2512,8 @@ function importRobinhood(event, account) {
       }
 
       // Replay all trades oldest-first to compute current shares + weighted avg cost
-      const positions = {}; // sym -> { shares, totalCost }
+      const positions = {};
+      const cashIn = {}, cashOut = {}; // sym -> { shares, totalCost }
       const dataRows = rows.slice(1).filter(r => r.length > iCode && r[iSym] && r[iCode]);
       // Sort oldest first (dates are M/D/YYYY)
       dataRows.sort((a, b) => new Date(a[iDate]) - new Date(b[iDate]));
@@ -2529,6 +2530,7 @@ function importRobinhood(event, account) {
           if (!positions[sym]) positions[sym] = { shares: 0, totalCost: 0 };
           positions[sym].totalCost += qty * price;
           positions[sym].shares += qty;
+          if (code === 'Buy') { if (!cashIn[sym]) cashIn[sym] = 0; cashIn[sym] += qty * price; }
         }
         // Sell: reduce shares proportionally — never delete mid-loop (same-day wash trades go temporarily negative)
         else if (code === 'Sell') {
@@ -2537,6 +2539,7 @@ function importRobinhood(event, account) {
           const avgCost = pos.shares > 0 ? pos.totalCost / pos.shares : price;
           pos.shares -= qty;
           pos.totalCost -= qty * avgCost;
+          if (!cashOut[sym]) cashOut[sym] = 0; cashOut[sym] += qty * price;
         }
       }
 
@@ -2552,7 +2555,9 @@ function importRobinhood(event, account) {
       for (const [sym, pos] of Object.entries(positions)) {
         if (pos.shares > 0.001) {
           const avgCost = pos.totalCost / pos.shares;
-          port[sym] = { shares: +pos.shares.toFixed(6), avgCost: +avgCost.toFixed(4) };
+          // Store net cash invested (spent on buys minus received from sells)
+          const netCost = (cashIn[sym] || 0) - (cashOut[sym] || 0);
+          port[sym] = { shares: +pos.shares.toFixed(6), avgCost: +avgCost.toFixed(4), netCost: +netCost.toFixed(2) };
           count++;
         }
       }
@@ -2588,6 +2593,21 @@ function importRobinhood(event, account) {
     event.target.value = '';
   };
   reader.readAsText(file);
+}
+
+function editCostBasis(account) {
+  const current = customCostBasis[account === 'roth' ? 'roth' : 'port'];
+  const input = prompt(`Enter total cost basis for ${account === 'roth' ? 'Roth IRA' : 'Portfolio'} (leave blank to use calculated value):`, current != null ? current.toFixed(2) : '');
+  if (input === null) return; // cancelled
+  if (input.trim() === '') {
+    customCostBasis[account === 'roth' ? 'roth' : 'port'] = null;
+  } else {
+    const val = parseFloat(input.replace(/[$,]/g, ''));
+    if (isNaN(val) || val <= 0) { alert('Invalid amount'); return; }
+    customCostBasis[account === 'roth' ? 'roth' : 'port'] = val;
+  }
+  localStorage.setItem('custom_cost_basis', JSON.stringify(customCostBasis));
+  if (account === 'roth') renderRoth(); else renderPortfolio();
 }
 
 // ═══ EARNINGS ═══
