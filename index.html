@@ -877,7 +877,7 @@ function renderPortfolio() {
   }
 
   // Build rows
-  let totalVal = 0, totalCost = 0, totalDayGL = 0, hasPrices = false;
+  let totalVal = 0, totalCost = 0, totalNetCost = 0, totalDayGL = 0, hasPrices = false;
   const rows = syms.map(sym => {
     const pos = portfolio[sym];
     const isCash = sym === 'CASH';
@@ -892,6 +892,8 @@ function renderPortfolio() {
     const dayPct = isCash ? null : (q && pc != null ? ((q.c - pc) / pc) * 100 : null);
     if (mktVal != null) { totalVal += mktVal; if (!isCash) hasPrices = true; }
     totalCost += cost;
+    // Use netCost for total summary if available (net cash invested), else fall back to avgCost*shares
+    totalNetCost += isCash ? pos.shares : (pos.netCost != null ? pos.netCost : cost);
     if (dayGL != null) totalDayGL += dayGL;
     return { sym, pos, isCash, price, mktVal, cost, gl, glPct, dayGL, dayPct };
   });
@@ -956,7 +958,7 @@ function renderPortfolio() {
     tbody.appendChild(tr);
   });
 
-  const displayCost = totalCost;
+  const displayCost = totalNetCost;
   const totalGL = hasPrices ? totalVal - displayCost : null;
   const totalGLPct = (totalGL != null && displayCost > 0) ? (totalGL / displayCost) * 100 : null;
   const baseline = totalVal - totalDayGL;
@@ -1122,7 +1124,7 @@ function renderRoth() {
     tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2.5rem;font-size:13px">No positions yet — add one below.</td></tr>`;
     rSetSummary(null,null,null,null,null,null); rUpdateHeaders(); return;
   }
-  let totalVal=0, totalCost=0, totalDayGL=0, hasPrices=false;
+  let totalVal=0, totalCost=0, totalNetCost=0, totalDayGL=0, hasPrices=false;
   const rows = syms.map(sym => {
     const pos=rPortfolio[sym], isCash=sym==='CASH', q=isCash?null:quotes[sym];
     const price=isCash?1:(q?q.c:null);
@@ -1134,7 +1136,9 @@ function renderRoth() {
     const dayGL=isCash?null:(q&&pc!=null?(q.c-pc)*pos.shares:null);
     const dayPct=isCash?null:(q&&pc!=null?((q.c-pc)/pc)*100:null);
     if(mktVal!=null){totalVal+=mktVal;if(!isCash)hasPrices=true;}
-    totalCost+=cost; if(dayGL!=null)totalDayGL+=dayGL;
+    totalCost+=cost;
+    totalNetCost += isCash ? pos.shares : (pos.netCost != null ? pos.netCost : cost);
+    if(dayGL!=null)totalDayGL+=dayGL;
     return {sym,pos,isCash,price,mktVal,cost,gl,glPct,dayGL,dayPct};
   });
   const cashRows=rows.filter(r=>r.isCash), stockRows=rows.filter(r=>!r.isCash);
@@ -1176,7 +1180,7 @@ function renderRoth() {
     }
     tbody.appendChild(tr);
   });
-  const rDisplayCost = totalCost;
+  const rDisplayCost = totalNetCost;
   const totalGL=hasPrices?totalVal-rDisplayCost:null;
   const totalGLPct=(totalGL!=null&&rDisplayCost>0)?(totalGL/rDisplayCost)*100:null;
   const base=totalVal-totalDayGL, totalDayPct=base>0?(totalDayGL/base)*100:null;
