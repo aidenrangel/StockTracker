@@ -2978,6 +2978,16 @@ function connect() {
   const open = isExtendedHours();
   setBadge(open ? (isMarketOpen() ? 'poll' : 'poll') : 'closed');
 
+  // Reset chart history if we're on a new trading day
+  const todayTradingDate = getLastTradingDate();
+  const lastChartDate = portHistory.length ? new Date(portHistory[portHistory.length-1].t).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : null;
+  if (lastChartDate && lastChartDate !== todayTradingDate) {
+    portHistory.length = 0; rHistory.length = 0; ovHistory.length = 0;
+    if (portChart) { portChart.destroy(); portChart = null; }
+    if (rChart) { rChart.destroy(); rChart = null; }
+    if (ovChart) { ovChart.destroy(); ovChart = null; }
+  }
+
   // Suppress chart until all data + backfill is ready
   backfilling = true;
   // Show chart panel immediately with loading indicator
