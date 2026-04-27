@@ -979,7 +979,9 @@ function setSummary(val, cost, gl, glPct, dayGL, dayPct) {
   const dEl = document.getElementById('sum-day'), dPEl = document.getElementById('sum-day-pct');
   dEl.textContent = dayGL != null ? fs$(dayGL) : '—'; dEl.className = 'sc-val ' + (dayGL != null ? dir(dayGL) : 'flat');
   dPEl.textContent = dayPct != null ? fp(dayPct) : '—'; dPEl.className = 'sc-sub ' + (dayPct != null ? dir(dayPct) : 'flat');
-  if (dayGL != null && isExtendedHours()) { pushChartPoint(dayGL); pushOvChartPoint(); }
+  const lastPt = portHistory[portHistory.length - 1];
+  const sameDay = lastPt && getLastTradingDate() === new Date(lastPt.t).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  if (dayGL != null && isExtendedHours() && sameDay) { pushChartPoint(dayGL); pushOvChartPoint(); }
 }
 
 // ═══ OVERVIEW ═══
@@ -1200,7 +1202,9 @@ function rSetSummary(val,cost,gl,glPct,dayGL,dayPct){
   const dEl=document.getElementById('r-sum-day'),dPEl=document.getElementById('r-sum-day-pct');
   dEl.textContent=dayGL!=null?fs$(dayGL):'—'; dEl.className='sc-val '+(dayGL!=null?dir(dayGL):'flat');
   dPEl.textContent=dayPct!=null?fp(dayPct):'—'; dPEl.className='sc-sub '+(dayPct!=null?dir(dayPct):'flat');
-  if(dayGL!=null && isExtendedHours()) { rPushChart(dayGL); pushOvChartPoint(); }
+  const rLastPt = rHistory[rHistory.length - 1];
+  const rSameDay = rLastPt && getLastTradingDate() === new Date(rLastPt.t).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  if(dayGL!=null && isExtendedHours() && rSameDay) { rPushChart(dayGL); pushOvChartPoint(); }
 }
 
 function rPushChart(val,t=null,seeded=false){
