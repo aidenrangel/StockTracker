@@ -311,9 +311,7 @@ footer a{color:var(--text2)}
           <div class="chart-title">Today's P&amp;L</div>
           <div class="chart-sub" id="chart-sub">Live session</div>
         </div>
-      <div style="display:flex;align-items:center;gap:8px">
-          <button id="ytd-toggle-port" onclick="toggleYTD('port')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">YTD</button>
-          <button id="voo-toggle-port" onclick="toggleVOO('port')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">VOO</button>
+      <div style="display:flex;align-items:center;gap:8px">          <button id="voo-toggle-port" onclick="toggleVOO('port')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">VOO</button>
           <div class="chart-val" id="chart-val">—</div>
           <div class="chart-delta" id="chart-delta"></div>
       </div>
@@ -391,9 +389,7 @@ footer a{color:var(--text2)}
           <div class="chart-sub" id="r-chart-sub">Live session</div>
         </div>
         <div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button id="ytd-toggle-roth" onclick="toggleYTD('roth')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">YTD</button>
-            <button id="voo-toggle-roth" onclick="toggleVOO('roth')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">VOO</button>
+          <div style="display:flex;align-items:center;gap:8px">            <button id="voo-toggle-roth" onclick="toggleVOO('roth')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">VOO</button>
             <div class="chart-val" id="r-chart-val">—</div>
             <div class="chart-delta" id="r-chart-delta"></div>
           </div>
@@ -541,9 +537,7 @@ footer a{color:var(--text2)}
           <div class="chart-sub" id="ov-chart-sub">Portfolio + Roth IRA</div>
         </div>
         <div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button id="ytd-toggle-ov" onclick="toggleYTD('ov')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">YTD</button>
-            <button id="voo-toggle-ov" onclick="toggleVOO('ov')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">VOO</button>
+          <div style="display:flex;align-items:center;gap:8px">            <button id="voo-toggle-ov" onclick="toggleVOO('ov')" style="font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.3px">VOO</button>
             <div class="chart-val" id="ov-chart-val">—</div>
             <div class="chart-delta" id="ov-chart-delta"></div>
           </div>
@@ -1551,140 +1545,6 @@ function vooDatasetOv() {
   return makeVOODataset(ovHistory[0].t.getTime(), ovHistory[ovHistory.length-1].t.getTime());
 }
 
-let showYTD = { port: false, roth: false, ov: false };
-let ytdDailyCache = {}; // sym -> [{date, close}]
-
-async function fetchYTDDaily(syms) {
-  const year = new Date().getFullYear();
-  await Promise.all(syms.map(async sym => {
-    if (ytdDailyCache[sym]) return;
-    try {
-      const r = await fetch(`${TIINGO_PROXY}/daily/${sym}/prices?startDate=${year}-01-01&token=${tiingoKey}`, { headers: { 'Authorization': `Token ${tiingoKey}` } });
-      const d = await r.json();
-      if (Array.isArray(d) && d.length) ytdDailyCache[sym] = d.map(b => ({ date: b.date.slice(0,10), close: b.adjClose ?? b.close }));
-    } catch(e) { console.error('fetchYTDDaily', sym, e); }
-  }));
-}
-
-function buildYTDSeries(port) {
-  const syms = Object.keys(port).filter(s => s !== 'CASH');
-  const allDates = [...new Set(syms.flatMap(s => (ytdDailyCache[s] || []).map(b => b.date)))].sort();
-  if (!allDates.length) return null;
-
-  // Build running share count per symbol per date using trade history
-  const sharesAt = {};
-  syms.forEach(sym => {
-    const trades = (tradeHistory[sym] || []).slice().sort((a,b) => new Date(a.date) - new Date(b.date));
-    let running = 0, tradeIdx = 0;
-    sharesAt[sym] = {};
-    for (const date of allDates) {
-      while (tradeIdx < trades.length && trades[tradeIdx].date <= date) {
-        const t = trades[tradeIdx++];
-        if (t.code === 'Buy') running += t.qty;
-        else if (t.code === 'Sell') running -= t.qty;
-      }
-      sharesAt[sym][date] = Math.max(0, running);
-    }
-    // No trade history — use current shares for all dates
-    if (!trades.length) allDates.forEach(d => { sharesAt[sym][d] = port[sym].shares; });
-  });
-
-  // Compute portfolio value each day
-  const lastClose = {};
-  const dailyVals = [];
-  for (const date of allDates) {
-    let val = 0, hasAny = false;
-    for (const sym of syms) {
-      const bar = (ytdDailyCache[sym] || []).find(b => b.date === date);
-      if (bar) lastClose[sym] = bar.close;
-      const shares = sharesAt[sym][date] ?? 0;
-      if (lastClose[sym] != null && shares >= 0) { val += lastClose[sym] * shares; hasAny = true; }
-    }
-    if (hasAny) dailyVals.push({ date, x: new Date(date + 'T12:00:00').getTime(), val });
-  }
-  if (dailyVals.length < 2) return null;
-
-  // Compute cumulative dollar P&L day by day, normalize to % from start
-  const startVal = dailyVals[0].val;
-  if (startVal === 0) return null;
-  const pts = dailyVals.map(d => ({ x: d.x, y: ((d.val - startVal) / startVal) * 100 }));
-  return pts;
-}
-
-function makeYTDChart(canvasId, setChartRef, data) {
-  const last = data[data.length-1].y, isUp = last >= 0;
-  const color = isUp ? '#1a9470' : '#d94545', colorBg = isUp ? 'rgba(26,148,112,.07)' : 'rgba(217,69,69,.07)';
-  const minT = data[0].x, maxT = data[data.length-1].x + 86400000;
-  const yFmt = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
-  const dateFmt = v => { const d = new Date(v); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  setChartRef(new Chart(ctx, {
-    type: 'line',
-    data: { datasets: [{ data, borderColor: color, backgroundColor: colorBg, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: {
-        label: i => ': ' + (i.parsed.y >= 0 ? '+' : '') + i.parsed.y.toFixed(2) + '%',
-        title: items => dateFmt(items[0].parsed.x)
-      }, displayColors: false } },
-      scales: {
-        x: { type: 'linear', min: minT, max: maxT,
-          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxRotation: 0,
-            callback: v => { const d = new Date(v); if (d.getDate() > 7) return null; return d.toLocaleDateString('en-US', { month: 'short' }); } },
-          afterBuildTicks: axis => {
-            const ticks = []; let cur = new Date(axis.min); cur.setDate(1);
-            while (cur.getTime() <= axis.max) { ticks.push({ value: cur.getTime() }); cur.setMonth(cur.getMonth() + 1); }
-            axis.ticks = ticks;
-          },
-          grid: { display: false }, border: { display: false } },
-        y: { position: 'right',
-          ticks: { color: 'rgba(160,157,148,.8)', font: { size: 10 }, maxTicksLimit: 5, callback: yFmt },
-          grid: { color: c => c.tick.value === 0 ? 'rgba(160,157,148,.4)' : 'rgba(160,157,148,.08)', lineWidth: c => c.tick.value === 0 ? 1.5 : 1, drawBorder: false },
-          border: { display: false } }
-      }, animation: false
-    }
-  }));
-}
-
-function updateYTDChartHeader(which, data) {
-  const last = data[data.length-1].y, isUp = last >= 0;
-  const color = isUp ? 'var(--green-text)' : 'var(--red-text)';
-  const prefix = which === 'port' ? '' : which === 'roth' ? 'r-' : 'ov-';
-  const valEl = document.getElementById(prefix + 'chart-val');
-  const deltaEl = document.getElementById(prefix + 'chart-delta');
-  const subEl = document.getElementById(prefix + 'chart-sub');
-  if (valEl) { valEl.textContent = (last >= 0 ? '+' : '') + last.toFixed(2) + '%'; valEl.style.color = color; }
-  if (deltaEl) { deltaEl.textContent = 'year to date'; deltaEl.style.color = color; }
-  const fmt = x => new Date(x).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  if (subEl) subEl.textContent = `${fmt(data[0].x)} → ${fmt(data[data.length-1].x)}`;
-}
-
-async function toggleYTD(which) {
-  showYTD[which] = !showYTD[which];
-  if (showYTD[which] && showVOO[which]) toggleVOO(which); // can't have both
-  const btn = document.getElementById('ytd-toggle-' + which);
-  if (btn) {
-    btn.style.background = showYTD[which] ? 'rgba(251,191,36,0.15)' : 'transparent';
-    btn.style.color = showYTD[which] ? 'rgba(251,191,36,1)' : 'var(--text3)';
-    btn.style.borderColor = showYTD[which] ? 'rgba(251,191,36,0.5)' : 'var(--border)';
-  }
-  if (!showYTD[which]) {
-    // Back to intraday
-    if (which === 'port') { if (portChart) { portChart.destroy(); portChart = null; } renderChart(); }
-    else if (which === 'roth') { if (rChart) { rChart.destroy(); rChart = null; } rRenderChart(); }
-    else { if (ovChart) { ovChart.destroy(); ovChart = null; } renderOvChart(); }
-    return;
-  }
-  const port = which === 'roth' ? rPortfolio : which === 'ov' ? { ...portfolio, ...rPortfolio } : portfolio;
-  const syms = Object.keys(port).filter(s => s !== 'CASH');
-  if (tiingoKey) { const sub = document.getElementById((which === 'port' ? '' : which === 'roth' ? 'r-' : 'ov-') + 'chart-sub'); if (sub) sub.textContent = 'Loading YTD data…'; await fetchYTDDaily(syms); }
-  const data = buildYTDSeries(port);
-  if (!data) { showYTD[which] = false; if (btn) btn.style.background = 'transparent'; return; }
-  if (which === 'port') { if (portChart) { portChart.destroy(); portChart = null; } makeYTDChart('port-chart', c => portChart = c, data); }
-  else if (which === 'roth') { if (rChart) { rChart.destroy(); rChart = null; } makeYTDChart('r-chart', c => rChart = c, data); }
-  else { if (ovChart) { ovChart.destroy(); ovChart = null; } makeYTDChart('ov-chart', c => ovChart = c, data); }
-  updateYTDChartHeader(which, data);
-}
 
 function toggleVOO(which) {
   showVOO[which] = !showVOO[which];
