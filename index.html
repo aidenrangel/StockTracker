@@ -974,7 +974,7 @@ function setSummary(val, cost, gl, glPct, dayGL, dayPct) {
   const dEl = document.getElementById('sum-day'), dPEl = document.getElementById('sum-day-pct');
   dEl.textContent = dayGL != null ? fs$(dayGL) : '—'; dEl.className = 'sc-val ' + (dayGL != null ? dir(dayGL) : 'flat');
   dPEl.textContent = dayPct != null ? fp(dayPct) : '—'; dPEl.className = 'sc-sub ' + (dayPct != null ? dir(dayPct) : 'flat');
-  if (dayGL != null) { pushChartPoint(dayGL); pushOvChartPoint(); }
+  if (dayGL != null && isExtendedHours()) { pushChartPoint(dayGL); pushOvChartPoint(); }
 }
 
 // ═══ OVERVIEW ═══
@@ -1190,7 +1190,7 @@ function rSetSummary(val,cost,gl,glPct,dayGL,dayPct){
   const dEl=document.getElementById('r-sum-day'),dPEl=document.getElementById('r-sum-day-pct');
   dEl.textContent=dayGL!=null?fs$(dayGL):'—'; dEl.className='sc-val '+(dayGL!=null?dir(dayGL):'flat');
   dPEl.textContent=dayPct!=null?fp(dayPct):'—'; dPEl.className='sc-sub '+(dayPct!=null?dir(dayPct):'flat');
-  if(dayGL!=null) { rPushChart(dayGL); pushOvChartPoint(); }
+  if(dayGL!=null && isExtendedHours()) { rPushChart(dayGL); pushOvChartPoint(); }
 }
 
 function rPushChart(val,t=null,seeded=false){
